@@ -97,6 +97,7 @@ function sfx(n) {
     case 'deflect': tone('square', 1500, 2400, 0.08, 0.1); noise('highpass', 4000, 2500, 0.08, 0.3); break;
     case 'parry': tone('triangle', 900, 2600, 0.25, 0.25); noise('highpass', 5000, 2000, 0.2, 0.4); break;
     case 'push': tone('sine', 110, 35, 0.45, 0.6); noise('lowpass', 700, 100, 0.4, 0.5); break;
+    case 'stomp': tone('sine', 95, 38, 0.1, 0.5); noise('lowpass', 420, 90, 0.07, 0.35); break;
     case 'dash': noise('bandpass', 1800, 500, 0.15, 0.25, 1.5); break;
     case 'die': noise('lowpass', 2500, 120, 0.4, 0.5); tone('sawtooth', 300, 40, 0.4, 0.15); break;
     case 'ui': tone('sine', 660, 990, 0.1, 0.2); break;
@@ -191,7 +192,7 @@ const MOVES = {
       [0.40, { a: -2.0, h: [16, -27], lean: 0.1, cr: 6, hip: 3, ff: 22, fl: 9 }],
       [0.52, { a: -0.3, h: [30, -8], lean: 0.32, cr: 12, hip: 7, rf: -23, ff: 28 }, 'in'],
       [0.6, { a: 0.1, h: [32, -1], lean: 0.37, cr: 13, hip: 9 }, 'out'],             // tenouchi: the hands wring and the cut stops dead at the target
-      [0.82, { a: -0.04, h: [31, -3], lean: 0.33, cr: 12, hip: 10, rf: -21, ff: 29 }], // yosei: momentum carries the body on behind the blade
+      [0.82, { a: -0.04, h: [31, -3], lean: 0.2, cr: 8, hip: 11, rf: -11, ff: 29 }],  // yosei + hikitsuke: the body carries on and the rear foot snaps up under it
       [1, { a: -0.5, h: [18, 18], lean: 0.2, cr: 8, hip: 4, rf: -19, ff: 19 }]]),
     // rising cut from a low guard — load the legs, then drive up through the target
     mv({ lb: 'RISING CUT', dur: 0.34, h: 'high', from: 'lo', end: 'hi', dmg: 15, reach: 78, lunge: 300, kb: 110, hop: 30, hw: [0.38, 1], launch: 520, act: [0.38, 0.66] }, [
@@ -206,7 +207,7 @@ const MOVES = {
       [0.40, { a: -1.3, h: [22, -12], lean: 0.14, cr: 6, hip: 3, ff: 23, fl: 8 }],
       [0.52, { a: -0.28, h: [31, -9], lean: 0.26, cr: 9, hip: 7, rf: -22, ff: 28 }, 'in'],
       [0.62, { a: -0.2, h: [32, -8], lean: 0.28, cr: 9, hip: 9 }, 'out'],
-      [0.84, { a: -0.3, h: [30, -7], lean: 0.24, cr: 8, hip: 9, rf: -18, ff: 27 }],
+      [0.84, { a: -0.3, h: [30, -7], lean: 0.16, cr: 6, hip: 10, rf: -10, ff: 27 }],   // hikitsuke
       [1, { a: -0.5, h: [16, 20], lean: 0.14, cr: 6, hip: 3, rf: -17, ff: 17 }]])
   ],
   mid: [
@@ -237,6 +238,7 @@ const MOVES = {
       [0.40, { a: -0.95, h: [22, 4], lean: 0.12, cr: 6, hip: 3, ff: 21, fl: 6 }],
       [0.52, { a: -0.02, h: [30, 9], lean: 0.2, cr: 8, hip: 6, rf: -20, ff: 26 }, 'in'],
       [0.64, { a: 0.03, h: [30, 10], lean: 0.2, cr: 8, hip: 7 }, 'out'],
+      [0.84, { a: -0.1, h: [28, 10], lean: 0.14, cr: 6, hip: 8, rf: -10, ff: 25 }],             // hikitsuke
       [1, { a: -0.5, h: [16, 21], lean: 0.12, cr: 6, hip: 3, rf: -17, ff: 17 }]])
   ],
   low: [
@@ -262,7 +264,7 @@ const JODAN_MEN = mv({ nm: 'MEN', dur: 0.3, h: 'high', from: 'hi', end: 'mid', d
   [0.40, { a: -2.0, h: [15, -28], lean: 0.1, cr: 6, hip: 3, rf: 2, rl: 8, ff: -3 }],
   [0.52, { a: -0.3, h: [31, -8], lean: 0.3, cr: 11, hip: 7, rf: 27, ff: -22 }, 'in'],
   [0.6, { a: 0.08, h: [32, -1], lean: 0.35, cr: 12, hip: 9 }, 'out'],
-  [0.82, { a: -0.04, h: [31, -3], lean: 0.32, cr: 11, hip: 10, rf: 28, ff: -20 }],
+  [0.82, { a: -0.04, h: [31, -3], lean: 0.2, cr: 8, hip: 11, rf: 28, ff: -9 }],
   [1, { a: -0.5, h: [17, 19], lean: 0.18, cr: 7, hip: 4, rf: 19, ff: -17 }]]);
 // hiki-waza — struck from close quarters while springing backward
 const HIKI = {
@@ -859,7 +861,9 @@ function updatePlayer(dt) {
     const s = p.sw, d = s.def; s.t += dt;
     const k = swK(s), act = d.act || ACT;
     if (!s.stepped && k >= (d.stepK || 0.3)) { s.stepped = true; if (p.onGround && d.lunge) p.vx = p.facing * d.lunge; } // the step drives the cut
-    if (!s.stomp && !d.air && k >= act[0] + 0.1 && p.onGround) { s.stomp = true; dust(p.x + p.facing * 24, GROUND, 2); }
+    if (!s.stomp && !d.air && k >= act[0] + 0.1 && p.onGround) { // fumikomi: the foot stamps flat as the blade lands — sword, body and voice arrive together
+      s.stomp = true; dust(p.x + p.facing * 24, GROUND, d.nm ? 4 : 2); if (d.nm && !p.nun) { sfx('stomp'); shake = Math.max(shake, 2); }
+    }
     if (d.multi && (s.mi || 0) < d.multi.length && k >= d.multi[s.mi || 0]) { s.mi = (s.mi || 0) + 1; s.hitSet.clear(); } // a whirl comes round again
     if (k > act[0] && k < act[1]) {
       const reach = d.reach * p.reachMul;
