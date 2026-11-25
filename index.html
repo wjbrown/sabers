@@ -673,11 +673,11 @@ function pose(e) {
   if (sw && !m) lean += f * 0.28;
   if (e.dash > 0) { lean = e.dashDir * 0.7; crouch = 8; }
   if (e.blocking || e.blockT > 0) lean -= f * 0.08;
-  if (e.hitR > 0.02 && e.type !== 'player') { // the body gives where it was struck: head and shoulders thrown back by a cut to the head,
-    const r = e.hitR;                          // folded over one to the flank, the leg buckling under one to the knee
-    if (e.hitH === 'high') { lean -= f * 0.32 * r; crouch += 5 * r; }
-    else if (e.hitH === 'low') { lean += f * 0.16 * r; crouch += 12 * r; }
-    else { lean += f * 0.38 * r; crouch += 6 * r; }
+  if (e.hitR > 0.02) { // the body gives where it was struck: head and shoulders thrown back by a cut to the head,
+    const r = e.hitR, hd = e.hitDir || -f;   // folded over one to the flank, the leg buckling under one to the knee
+    if (e.hitH === 'high') { lean += hd * 0.32 * r; crouch += 5 * r; }
+    else if (e.hitH === 'low') { lean -= hd * 0.16 * r; crouch += 12 * r; }
+    else { lean -= hd * 0.38 * r; crouch += 6 * r; }
   }
   if (e.recoil > 0.02) { lean -= f * 0.14 * e.recoil; crouch += 6 * e.recoil; } // a received blow is taken by the legs and hips, not the arms
   if (planted) crouch += clamp((Math.abs(F.x[0] - F.x[1]) / s - 34) * 0.22, 0, 8) * (1 - w); // a long stride sinks the hips
@@ -802,7 +802,7 @@ function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
   e.hp -= dmg; e.hitFlash = 0.12;
   if (!e.armor || fin) {
     if (e.state !== 'stun') { e.state = 'hit'; e.stateT = fin ? 0.4 : 0.24; }
-    e.hitH = d && d.h || 'mid'; e.hitR = 1;
+    e.hitH = d && d.h || 'mid'; e.hitR = 1; e.hitDir = dir;
     e.sw = null; e.vx = dir * kb * (e.armor ? 0.5 : 1); if (fin && !e.hover) { e.vy = -kb * 0.45; e.onGround = false; }
   }
   if (d && d.launch && !e.hover && !e.armor) { e.vy = -d.launch; e.onGround = false; }
@@ -829,7 +829,7 @@ function kill(e) {
 }
 function hurtPlayer(dmg, dir) {
   const p = player; if (p.invuln > 0 || p.hp <= 0) return;
-  p.hp -= dmg; p.invuln = 0.55; p.hitFlash = 0.15; p.vx = dir * 320; p.vy = -180; p.onGround = false;
+  p.hp -= dmg; p.invuln = 0.55; p.hitFlash = 0.15; p.hitR = 1; p.hitDir = dir; p.hitH = p.hitHNext || 'mid'; p.hitHNext = null; p.vx = dir * 320; p.vy = -180; p.onGround = false;
   p.sw = null; p.blocking = false; p.stun = 0.18; hits = 0;
   sparks(p.x, p.y - 50, 12, '#ff4d4d', 400, dir); sfx('hurt'); shake = 12; hitstop = 0.07; flash = 0.12;
   if (p.hp <= 0) { p.hp = 0; p.lastHitDir = dir; shatter(p); slowT = 1.4; deadT = 0; sfx('die'); }
@@ -864,6 +864,7 @@ function enemyStrike(e, aoe) {
     }
     return;
   }
+  p.hitHNext = d && d.h || 'mid';
   hurtPlayer(e.dmg, dir);
 }
 function fireBolt(x, y, tx, ty, speed, dmg, src) {
@@ -911,7 +912,7 @@ function updatePlayer(dt) {
   if (p.comboTimer > 0) { p.comboTimer -= dt; if (p.comboTimer <= 0) p.comboIdx = 0; }
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
   const stunned = p.stun > 0; if (stunned) p.stun -= dt;
-  p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380); if (p.recoil > 0) p.recoil *= Math.exp(-9 * dt);
+  p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380); if (p.recoil > 0) p.recoil *= Math.exp(-9 * dt); if (p.hitR > 0) p.hitR *= Math.exp(-5.5 * dt);
   if (p.zan > 0) { p.zan -= dt; if (!p.sw && !mx) p.facing = Math.sign(p.zanX - p.x) || p.facing; if (mx || p.dash > 0 || nearestEnemy(150)) p.zan = 0; if (p.zan <= 0 && !p.hold) { p.guard = 'chudan'; p.guardT = 1.5; } }
   if (p.lockT > 0) { // pressing in the bind; it ends with a shove apart, or sooner if either of us acts
     const le = p.lockE, alive = le && enemies.includes(le) && le.lockT > -0.5; // (their timer runs a frame ahead of ours)
