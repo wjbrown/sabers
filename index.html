@@ -667,6 +667,12 @@ function pose(e) {
   if (sw && !m) lean += f * 0.28;
   if (e.dash > 0) { lean = e.dashDir * 0.7; crouch = 8; }
   if (e.blocking || e.blockT > 0) lean -= f * 0.08;
+  if (e.hitR > 0.02 && e.type !== 'player') { // the body gives where it was struck: head and shoulders thrown back by a cut to the head,
+    const r = e.hitR;                          // folded over one to the flank, the leg buckling under one to the knee
+    if (e.hitH === 'high') { lean -= f * 0.32 * r; crouch += 5 * r; }
+    else if (e.hitH === 'low') { lean += f * 0.16 * r; crouch += 12 * r; }
+    else { lean += f * 0.38 * r; crouch += 6 * r; }
+  }
   if (e.recoil > 0.02) { lean -= f * 0.14 * e.recoil; crouch += 6 * e.recoil; } // a received blow is taken by the legs and hips, not the arms
   if (planted) crouch += clamp((Math.abs(F.x[0] - F.x[1]) / s - 34) * 0.22, 0, 8) * (1 - w); // a long stride sinks the hips
   if (w) { lean = lerp(lean, f * sb.lean, w); crouch = lerp(crouch, sb.cr, w); hipX = lerp(hipX, f * sb.hip, w); }
@@ -784,6 +790,7 @@ function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
   e.hp -= dmg; e.hitFlash = 0.12;
   if (!e.armor || fin) {
     if (e.state !== 'stun') { e.state = 'hit'; e.stateT = fin ? 0.4 : 0.24; }
+    e.hitH = d && d.h || 'mid'; e.hitR = 1;
     e.sw = null; e.vx = dir * kb * (e.armor ? 0.5 : 1); if (fin && !e.hover) { e.vy = -kb * 0.45; e.onGround = false; }
   }
   if (d && d.launch && !e.hover && !e.armor) { e.vy = -d.launch; e.onGround = false; }
@@ -1100,6 +1107,7 @@ function updateEnemy(e, dt) {
   e.animT += dt; e.hitFlash -= dt; e.cool -= dt; if (e.blockT > 0) e.blockT -= dt;
   if (e.swept > 0) e.swept -= dt;
   if (e.recoil > 0) e.recoil *= Math.exp(-9 * dt);
+  if (e.hitR > 0) e.hitR *= Math.exp(-5.5 * dt);
   if (e.lockT > 0) { e.lockT -= dt; e.cool = Math.max(e.cool, 0.3); if (e.state !== 'chase') e.lockT = -1; }
   if (!e.entered && e.x > 20 && e.x < WORLD - 20) e.entered = true;
 
