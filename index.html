@@ -185,7 +185,7 @@ function beginSwing(e, def, dur) {
 }
 const MOVES = {
   high: [
-    // men-uchi / Scheitelhau — overhead cut from a high guard, landing with a stamping lunge step
+    // men-uchi (shomen) — overhead cut from a high guard, landing with a stamping lunge step
     mv({ nm: 'MEN', dur: 0.34, h: 'high', from: 'hi', end: 'mid', dmg: 16, reach: 86, lunge: 440, kb: 200 }, [
       [0.22, { a: -2.6, h: [5, -31], lean: -0.14, cr: 3, hip: -4, rf: -15, ff: 10 }, 'out'],
       [0.40, { a: -2.0, h: [16, -27], lean: 0.1, cr: 6, hip: 3, ff: 22, fl: 9 }],
@@ -217,14 +217,14 @@ const MOVES = {
       [0.52, { a: -0.1, h: [31, 4], lean: 0.34, cr: 12, hip: 7, rf: -23, ff: 28 }, 'in'],
       [0.74, { a: 1.0, h: [15, 22], lean: 0.38, cr: 13, hip: 7 }, 'out'],
       [1, { a: 0.85, h: [13, 22], lean: 0.25, cr: 8, hip: 3, rf: -19, ff: 19 }]]),
-    // gyaku-kesa / Unterhau — rising diagonal from a rear low guard, with a passing step (rear leg comes through)
+    // gyaku-kesa — rising diagonal from a rear low guard, with a passing step (rear leg comes through)
     mv({ lb: 'RISING DIAGONAL', dur: 0.3, h: 'mid', from: 'lo', end: 'hi', dmg: 12, reach: 84, lunge: 420, kb: 160 }, [
       [0.22, { a: 2.1, h: [-8, 20], lean: 0.14, cr: 9, hip: -3, rf: -14, ff: 12 }, 'out'],
       [0.40, { a: 1.2, h: [12, 20], lean: 0.22, cr: 9, hip: 3, rf: 2, rl: 7, ff: -3 }],
       [0.52, { a: 0.05, h: [30, 6], lean: 0.3, cr: 10, hip: 6, rf: 26, ff: -22 }, 'in'],
       [0.74, { a: -1.2, h: [20, -18], lean: 0.12, cr: 4, hip: 5 }, 'out'],
       [1, { a: -1.3, h: [12, -9], lean: 0.08, cr: 4, hip: 2, rf: 19, ff: -17 }]]),
-    // tsuki — thrust on a full fencing lunge: hands drawn back to the hip, then the whole body behind the point
+    // tsuki — thrust on a full lunge: hands drawn back to the hip, then the whole body behind the point
     mv({ nm: 'TSUKI', dur: 0.32, h: 'mid', from: 'mid', end: 'mid', dmg: 14, reach: 108, lunge: 620, kb: 260, act: [0.36, 0.7] }, [
       [0.24, { a: -0.16, h: [-9, 14], lean: -0.06, cr: 9, hip: -6, rf: -13, ff: 9 }, 'out'],
       [0.38, { a: -0.08, h: [12, 8], lean: 0.25, cr: 11, hip: 2, rf: -19, ff: 22, fl: 8 }],
@@ -639,7 +639,10 @@ function pose(e) {
   // the shoulders turn with the cut: wound back in the chamber, driven through at impact
   const tw = f * clamp(sb.hx / 26, -1, 1) * 4.5 * s, shA = { x: sh.x + tw, y: sh.y }, shB = { x: sh.x - tw, y: sh.y + 1.5 * s };
   const freeX = shB.x - f * (3 + Math.cos(e.run) * 13) * s, freeY = sh.y + (21 - Math.abs(Math.sin(e.run)) * 5) * s;
-  const hand2 = { x: lerp(freeX, hand.x - dir.x * 7 * s, sb.two), y: lerp(freeY, hand.y - dir.y * 7 * s, sb.two) };
+  // te-no-uchi: right hand under the guard, left hand at the very end of the hilt. The gap makes the hilt a lever
+  // (the left hand pulls as the right pushes), so the left hand visibly drives the cut.
+  const grip = (e.nun ? 7 : 11) * s;
+  const hand2 = { x: lerp(freeX, hand.x - dir.x * grip, sb.two), y: lerp(freeY, hand.y - dir.y * grip, sb.two) };
   limit(shB, hand2, 33.5 * s);
   const e1 = ik(shA, hand, 17 * s, 17 * s, f), e2 = ik(shB, hand2, 17 * s, 17 * s, f);
   const len = (e.gun ? 16 : e.bladeLen) * s;
@@ -1161,12 +1164,12 @@ function drawBlade(hx, hy, tx, ty, col, w, boost) {
 function drawKatana(P, e, s) {
   const d = P.dir, n = { x: -d.y * e.facing, y: d.x * e.facing };           // n points toward the back (spine) of the blade
   const at = k => ({ x: P.hand.x + d.x * k * s, y: P.hand.y + d.y * k * s });
-  const butt = at(-13), guard = at(5), tip = P.tip, L = Math.hypot(tip.x - guard.x, tip.y - guard.y);
+  const butt = at(-15), guard = at(5), tip = P.tip, L = Math.hypot(tip.x - guard.x, tip.y - guard.y);
   const mid = { x: (guard.x + tip.x) / 2 + n.x * L * 0.07, y: (guard.y + tip.y) / 2 + n.y * L * 0.07 };
   ctx.save(); ctx.lineCap = 'butt';
   ctx.strokeStyle = '#23232b'; ctx.lineWidth = 4.6 * s; line(butt, guard);                       // wrapped grip
   ctx.strokeStyle = '#d8d2bc'; ctx.lineWidth = 1.2;
-  for (let k = -10; k <= 2; k += 4) { const a = at(k), b = at(k + 2.4); ctx.beginPath(); ctx.moveTo(a.x - n.x * 2.3 * s, a.y - n.y * 2.3 * s); ctx.lineTo(b.x + n.x * 2.3 * s, b.y + n.y * 2.3 * s); ctx.stroke(); }
+  for (let k = -12; k <= 2; k += 4) { const a = at(k), b = at(k + 2.4); ctx.beginPath(); ctx.moveTo(a.x - n.x * 2.3 * s, a.y - n.y * 2.3 * s); ctx.lineTo(b.x + n.x * 2.3 * s, b.y + n.y * 2.3 * s); ctx.stroke(); }
   ctx.lineCap = 'round';
   const flash = e.sw ? 1 : 0;
   ctx.shadowColor = '#bfe4ff'; ctx.shadowBlur = (3 + flash * 7) * zoom * DPR;
@@ -1281,7 +1284,7 @@ function drawFigure(e) {
   } else if (e.nun) {
     drawNun(P, e, s);
   } else if (e.blade) {
-    const back = { x: P.hand.x - P.dir.x * 9 * s, y: P.hand.y - P.dir.y * 9 * s };
+    const hl = (e.twin ? 9 : 14) * s, back = { x: P.hand.x - P.dir.x * hl, y: P.hand.y - P.dir.y * hl };
     ctx.strokeStyle = '#5a5a66'; ctx.lineWidth = 5 * s; ctx.lineCap = 'butt'; line(back, { x: P.hand.x + P.dir.x * 4 * s, y: P.hand.y + P.dir.y * 4 * s });
     let boost = 0;
     if (e.state === 'windup') boost = 1 - e.stateT / e.windT;
