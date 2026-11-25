@@ -642,6 +642,12 @@ function pose(e) {
     f2 = { x: lerp(f2.x, e.x + f * sb.ff * s, w), y: lerp(f2.y, e.y - sb.fl * s, w) };
   }
   limit(hip, f1, 41.5 * s); limit(hip, f2, 41.5 * s); // an over-reached leg rises onto the toe instead of stretching
+  // feet: the front foot sits flat; the rear heel is kept just off the floor (weight on the ball, ready to drive), and
+  // comes up further the longer the stride. f1/f2 are the ankles; the toes stay on the ground until the foot leaves it.
+  if (grounded) { const rear = (f1.x - f2.x) * f < 0 ? f1 : f2;
+    if (rear.y > e.y - 0.5 * s) rear.y -= (2.2 + clamp((Math.abs(rear.x - hip.x) / s - 18) * 0.22, 0, 4)) * s; }
+  const toeOf = a => a.y > e.y - 7 * s ? { x: a.x + f * 6.5 * s, y: Math.min(e.y, a.y + 3 * s) } : { x: a.x + f * 5 * s, y: a.y + 4 * s };
+  const t1 = toeOf(f1), t2 = toeOf(f2);
   const k1 = ik(hip, f1, 21 * s, 21 * s, -f), k2 = ik(hip, f2, 21 * s, 21 * s, -f);
   const sh = { x: lerp(neck.x, hip.x, 0.12), y: lerp(neck.y, hip.y, 0.12) };
   const dir = { x: f * Math.cos(sb.a), y: Math.sin(sb.a) };
@@ -661,14 +667,14 @@ function pose(e) {
   if (m && (hopY || m.flip || m.turn)) {
     const cy = e.y - 45 * s - hopY, th = m.flip ? f * TAU * smooth(win(m.fw)) * m.flip : 0, c = Math.cos(th), sn = Math.sin(th);
     const xs = m.turn ? Math.cos(TAU * smooth(win(m.tw)) * m.turn) : 1;
-    const xl = Math.abs(xs) < 0.4 ? (xs < 0 ? -0.4 : 0.4) : xs, legs = [k1, f1, k2, f2];
-    for (const q of [hip, k1, f1, k2, f2, neck, head, shA, shB, e1, e2, hand, hand2, tip]) {
+    const xl = Math.abs(xs) < 0.4 ? (xs < 0 ? -0.4 : 0.4) : xs, legs = [k1, f1, k2, f2, t1, t2];
+    for (const q of [hip, k1, f1, k2, f2, t1, t2, neck, head, shA, shB, e1, e2, hand, hand2, tip]) {
       const x = (q.x - e.x) * (legs.includes(q) ? xl : xs), y = q.y - hopY - cy; q.x = e.x + x * c - y * sn; q.y = cy + x * sn + y * c;
     }
     const dl = Math.hypot(tip.x - hand.x, tip.y - hand.y);
     if (dl > 1) { dir.x = (tip.x - hand.x) / dl; dir.y = (tip.y - hand.y) / dl; }
   }
-  return { segs: [[hip, k1], [k1, f1], [hip, k2], [k2, f2], [hip, neck], [shA, e1], [e1, hand], [shB, e2], [e2, hand2], [shB, shA]], head, hand, tip, dir, hip, neck };
+  return { segs: [[hip, k1], [k1, f1], [hip, k2], [k2, f2], [hip, neck], [shA, e1], [e1, hand], [shB, e2], [e2, hand2], [shB, shA], [f1, t1], [f2, t2]], head, hand, tip, dir, hip, neck };
 }
 
 // ───────────────────────── effects ─────────────────────────
