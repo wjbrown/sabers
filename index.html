@@ -266,6 +266,15 @@ const JODAN_MEN = mv({ nm: 'MEN', dur: 0.3, h: 'high', from: 'hi', end: 'mid', d
   [0.6, { a: 0.08, h: [32, -1], lean: 0.35, cr: 12, hip: 9 }, 'out'],
   [0.82, { a: -0.04, h: [31, -3], lean: 0.2, cr: 8, hip: 11, rf: 28, ff: -9 }],
   [1, { a: -0.5, h: [17, 19], lean: 0.18, cr: 7, hip: 4, rf: 19, ff: -17 }]]);
+// harai-men — a small, sharp sweep knocks the opponent's blade off the centre line, and the men follows in the same motion
+const HARAI_MEN = mv({ nm: 'MEN', harai: true, dur: 0.38, h: 'high', from: 'mid', end: 'mid', dmg: 13, reach: 90, lunge: 480, stepK: 0.42, kb: 170, act: [0.5, 0.74] }, [
+  [0.16, { a: -1.0, h: [20, 10], lean: 0.06, cr: 5, hip: 0, rf: -16, ff: 15 }, 'out'],
+  [0.3, { a: -0.3, h: [28, 12], lean: 0.14, cr: 6, hip: 3, ff: 19, fl: 4 }, 'in'],
+  [0.46, { a: -1.7, h: [18, -18], lean: 0.1, cr: 5, hip: 4, ff: 22, fl: 7 }],
+  [0.6, { a: -0.28, h: [31, -9], lean: 0.26, cr: 9, hip: 8, rf: -22, ff: 29 }, 'in'],
+  [0.7, { a: -0.2, h: [32, -8], lean: 0.26, cr: 9, hip: 9 }, 'out'],
+  [0.88, { a: -0.3, h: [30, -7], lean: 0.16, cr: 6, hip: 10, rf: -10, ff: 28 }],
+  [1, { a: -0.5, h: [16, 20], lean: 0.14, cr: 6, hip: 3, rf: -17, ff: 17 }]]);
 // hiki-waza — struck from close quarters while springing backward
 const HIKI = {
   high: mv({ nm: 'HIKI-MEN', dur: 0.3, h: 'high', end: 'mid', dmg: 12, reach: 84, lunge: -520, stepK: 0.44, carry: 900, kb: 170, act: [0.28, 0.56] }, [
@@ -285,7 +294,7 @@ HIKI.low = HIKI.mid;
 // renzoku-waza (kote-men, kote-do, men-do, tsuki-men) and the strike each kamae is built to throw
 { const [MEN, , MEN_S] = MOVES.high, [DO, , TSUKI, KOTE] = MOVES.mid;
   KOTE.next = { high: MEN_S, mid: DO }; MEN_S.next = { high: MEN, mid: DO }; TSUKI.next = { high: MEN_S };
-  GUARDS.chudan.pref = { mid: KOTE }; GUARDS.seigan.pref = { mid: TSUKI }; GUARDS.kasumi.pref = { mid: TSUKI };
+  GUARDS.chudan.pref = { mid: KOTE }; GUARDS.seigan.pref = { mid: TSUKI, high: HARAI_MEN }; GUARDS.kasumi.pref = { mid: TSUKI };
   GUARDS.jodan.pref = { high: JODAN_MEN }; GUARDS.gedan.pref = { mid: TSUKI, low: MOVES.low[1] }; GUARDS.waki.pref = { low: MOVES.low[0] }; }
 // ── Nunchaku ──────────────────────────────────────────────────────────────────────────────
 // One-handed, wrist-driven: whips that snap out and recoil, and whirls (figure-eight, overhead, low windmill) that strike
@@ -711,7 +720,7 @@ function nearestEnemy(maxD) {
 function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
   e.lastHitDir = dir;
   const facingAttacker = e.facing === -dir;
-  if (e.melee && e.block && !unblockable && facingAttacker && (e.state === 'chase' || e.state === 'recover') && Math.random() < e.block) {
+  if (e.melee && e.block && !unblockable && !(e.swept > 0) && facingAttacker && (e.state === 'chase' || e.state === 'recover') && Math.random() < e.block) {
     const P = pose(e);
     e.blockT = 0.35; e.blockH = d && d.h || 'mid'; e.vx += dir * (fin ? 320 : 130);
     sparks(P.hand.x + dir * -10, P.hand.y - 20, 12, '#fff', 420); sparks(P.hand.x, P.hand.y - 20, 6, e.blade, 300);
@@ -889,6 +898,13 @@ function updatePlayer(dt) {
     if (!s.stomp && !d.air && k >= act[0] + 0.1 && p.onGround) { // fumikomi: the foot stamps flat as the blade lands — sword, body and voice arrive together
       s.stomp = true; dust(p.x + p.facing * 24, GROUND, d.nm ? 4 : 2); if (d.nm && !p.nun) { sfx('stomp'); shake = Math.max(shake, 2); }
     }
+    if (d.harai && !s.beat && k >= 0.3) { // the sweep lands on their blade: for a moment they cannot bring it back
+      s.beat = true; const n = nearestEnemy(135);
+      if (n && n.melee && !n.gun && (n.x - p.x) * p.facing > 0 && (n.state === 'chase' || n.state === 'recover')) {
+        n.swept = 0.6; n.blockT = 0; if (n.sab) { n.sab.a += 1.0; n.sab.hy += 6; }
+        const P = pose(n); sparks((P.hand.x + P.tip.x) / 2, (P.hand.y + P.tip.y) / 2, 8, '#fff', 300); sfx('clash'); floatText(n.x, n.y - n.h - 12, 'HARAI', '#fff', 13);
+      }
+    }
     if (d.multi && (s.mi || 0) < d.multi.length && k >= d.multi[s.mi || 0]) { s.mi = (s.mi || 0) + 1; s.hitSet.clear(); } // a whirl comes round again
     if (k > act[0] && k < act[1]) {
       const reach = d.reach * p.reachMul;
@@ -1018,6 +1034,7 @@ function enemyBegin(e, windT) {
 function updateEnemy(e, dt) {
   const p = player, alive = p.hp > 0, dx = p.x - e.x, dist = Math.abs(dx);
   e.animT += dt; e.hitFlash -= dt; e.cool -= dt; if (e.blockT > 0) e.blockT -= dt;
+  if (e.swept > 0) e.swept -= dt;
   if (e.lockT > 0) { e.lockT -= dt; e.cool = Math.max(e.cool, 0.3); if (e.state !== 'chase') e.lockT = 0; }
   if (!e.entered && e.x > 20 && e.x < WORLD - 20) e.entered = true;
 
