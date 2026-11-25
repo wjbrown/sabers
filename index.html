@@ -667,6 +667,7 @@ function pose(e) {
   if (sw && !m) lean += f * 0.28;
   if (e.dash > 0) { lean = e.dashDir * 0.7; crouch = 8; }
   if (e.blocking || e.blockT > 0) lean -= f * 0.08;
+  if (e.recoil > 0.02) { lean -= f * 0.14 * e.recoil; crouch += 6 * e.recoil; } // a received blow is taken by the legs and hips, not the arms
   if (planted) crouch += clamp((Math.abs(F.x[0] - F.x[1]) / s - 34) * 0.22, 0, 8) * (1 - w); // a long stride sinks the hips
   if (w) { lean = lerp(lean, f * sb.lean, w); crouch = lerp(crouch, sb.cr, w); hipX = lerp(hipX, f * sb.hip, w); }
   const hip = { x: e.x + hipX * s, y: e.y - (40 - crouch) * s - bob * s };
@@ -726,6 +727,7 @@ function pose(e) {
     const xs0 = -Math.cos(Math.PI * (1 - e.turnT / 0.16)), xs = Math.abs(xs0) < 0.3 ? (xs0 < 0 ? -0.3 : 0.3) : xs0;
     for (const q of [neck, head, shA, shB, e1, e2, hand, hand2, tip]) q.x = hip.x + (q.x - hip.x) * xs;
     for (const q of [k1, k2]) q.x = hip.x + (q.x - hip.x) * Math.abs(xs);
+    t1.x = f1.x + (t1.x - f1.x) * xs; t2.x = f2.x + (t2.x - f2.x) * xs;
     const dl = Math.hypot(tip.x - hand.x, tip.y - hand.y); if (dl > 1) { dir.x = (tip.x - hand.x) / dl; dir.y = (tip.y - hand.y) / dl; }
   }
   return { segs: [[hip, k1], [k1, f1], [hip, k2], [k2, f2], [hip, neck], [shA, e1], [e1, hand], [shB, e2], [e2, hand2], [shB, shA], [f1, t1], [f2, t2]], head, hand, tip, dir, hip, neck };
@@ -766,7 +768,7 @@ function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
   const facingAttacker = e.facing === -dir;
   if (e.melee && e.block && !unblockable && !(e.swept > 0) && facingAttacker && (e.state === 'chase' || e.state === 'recover') && Math.random() < e.block) {
     const P = pose(e);
-    e.blockT = 0.35; e.blockH = d && d.h || 'mid'; e.vx += dir * (fin ? 320 : 130);
+    e.blockT = 0.35; e.blockH = d && d.h || 'mid'; e.vx += dir * (fin ? 320 : 130); e.recoil = 1;
     sparks(P.hand.x + dir * -10, P.hand.y - 20, 12, '#fff', 420); sparks(P.hand.x, P.hand.y - 20, 6, e.blade, 300);
     sfx('clash'); hitstop = Math.max(hitstop, 0.05); shake = Math.max(shake, 4);
     if (fin) { e.state = 'stun'; e.stateT = 0.5; e.blockT = 0; floatText(e.x, e.y - e.h - 10, 'GUARD BROKEN', '#ffd23a', 14); }
@@ -837,7 +839,8 @@ function enemyStrike(e, aoe) {
       p.en -= e.dmg * 1.3; p.vx = dir * (160 + e.dmg * 8);
       sparks(P.hand.x + p.facing * 12, P.hand.y - 22, 12, '#fff', 400); sparks(P.hand.x, P.hand.y - 22, 6, e.blade, 300);
       sfx('clash'); shake = Math.max(shake, 5); hitstop = 0.04;
-      if (p.sab) { p.sab.a += 0.32; p.sab.hx -= 8; p.sab.hy += 3; } // the blow slides off and the guard gives, then springs back
+      if (p.sab) { p.sab.a += p.blockH === 'high' ? -0.4 : 0.32; p.sab.hx -= 8; p.sab.hy += 3; } // uke-nagashi: the blow runs off the angled blade and the guard gives, then springs back
+      p.recoil = 1;
       if (p.en <= 0) { p.en = 0; p.stun = 0.75; p.blocking = false; floatText(p.x, p.y - 120, 'GUARD BREAK', '#ff4d4d', 18); }
     }
     return;
@@ -889,7 +892,7 @@ function updatePlayer(dt) {
   if (p.comboTimer > 0) { p.comboTimer -= dt; if (p.comboTimer <= 0) p.comboIdx = 0; }
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
   const stunned = p.stun > 0; if (stunned) p.stun -= dt;
-  p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380);
+  p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380); if (p.recoil > 0) p.recoil *= Math.exp(-9 * dt);
   if (p.zan > 0) { p.zan -= dt; if (!p.sw && !mx) p.facing = Math.sign(p.zanX - p.x) || p.facing; if (mx || p.dash > 0 || nearestEnemy(150)) p.zan = 0; if (p.zan <= 0 && !p.hold) { p.guard = 'chudan'; p.guardT = 1.5; } }
   if (p.lockT > 0) { // pressing in the bind; it ends with a shove apart, or sooner if either of us acts
     const le = p.lockE, alive = le && enemies.includes(le) && le.lockT > -0.5; // (their timer runs a frame ahead of ours)
@@ -1096,6 +1099,7 @@ function updateEnemy(e, dt) {
   const p = player, alive = p.hp > 0, dx = p.x - e.x, dist = Math.abs(dx);
   e.animT += dt; e.hitFlash -= dt; e.cool -= dt; if (e.blockT > 0) e.blockT -= dt;
   if (e.swept > 0) e.swept -= dt;
+  if (e.recoil > 0) e.recoil *= Math.exp(-9 * dt);
   if (e.lockT > 0) { e.lockT -= dt; e.cool = Math.max(e.cool, 0.3); if (e.state !== 'chase') e.lockT = -1; }
   if (!e.entered && e.x > 20 && e.x < WORLD - 20) e.entered = true;
 
