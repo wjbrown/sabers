@@ -323,7 +323,7 @@ const NGUARDS = {
 };
 const NKAMAE = Object.keys(NGUARDS), NEND = { hi: 'shoulder', lo: 'low', mid: 'ready' };
 const guardOf = e => e.nun ? NGUARDS[e.guard] || NGUARDS.ready : GUARDS[e.guard] || GUARDS.chudan;
-const kamaeOf = e => e.nun ? NKAMAE : KAMAE;
+const kamaeOf = e => e.nun ? NKAMAE : e.kamae || KAMAE;
 const NMOVES = {
   high: [
     mv({ lb: 'OVERHEAD WHIP', dur: 0.26, h: 'high', from: 'hi', end: 'lo', dmg: 10, reach: 88, lunge: 400, kb: 130 }, [
@@ -455,6 +455,9 @@ const E_MOVES = {
   boss: [MOVES.mid[0], MOVES.mid[1], MOVES.mid[2], MOVES.high[0], MOVES.high[1], MOVES.high[2], MOVES.low[0], FIN.mid]
 };
 const E_SWING = { heavy: 0.42, boss: 0.27 };
+// Each kind of fighter keeps to the guards that suit its temperament. Tradition pairs the five kamae with the five elements:
+// jodan is fire (all attack), chudan water (adaptable), gedan earth (patient), hasso wood, waki metal (concealed).
+const E_KAMAE = { grunt: ['chudan', 'hasso', 'gedan'], duelist: ['chudan', 'seigan', 'gedan', 'waki', 'kasumi'], heavy: ['jodan', 'migi', 'hasso'], boss: ['jodan', 'kasumi', 'waki', 'seigan'] };
 
 const TYPES = {
   grunt:   { name: 'Blade Grunt', hp: 38, speed: 150, dmg: 9, block: 0.15, windup: 0.5, recover: 0.5, cooldown: 1.1, combo: 1, scale: 1, color: '#9aa0ad', blade: '#ff3b3b', bladeLen: 54, reach: 82, lunge: 220, score: 100, head: 'round', melee: true },
@@ -532,7 +535,7 @@ function spawn(type) {
     type, x: side < 0 ? camX - 70 : camX + viewW + 70, y: GROUND, vx: 0, vy: 0, facing: -side, onGround: true,
     maxHp: Math.round(T.hp * (T.boss ? 1 + (wave / 5 - 1) * 0.6 : hpMul)), state: 'chase', stateT: 0, cool: rand(0.3, 1),
     blockT: 0, hitFlash: 0, run: 0, animT: rand(10), trail: [], sw: null, entered: false, comboLeft: 0,
-    fireT: rand(1, 2), aim: 0, leapCool: 3, w: 14 * T.scale, h: (T.hover ? 34 : 90) * T.scale
+    fireT: rand(1, 2), aim: 0, leapCool: 3, kamae: E_KAMAE[type], w: 14 * T.scale, h: (T.hover ? 34 : 90) * T.scale
   });
   e.hp = e.maxHp;
   if (T.hover) { e.y = GROUND - 190; e.baseY = GROUND - rand(160, 210); e.onGround = false; e.sideOff = rand(170, 280) * (Math.random() < 0.5 ? -1 : 1); }
