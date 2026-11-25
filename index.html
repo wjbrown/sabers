@@ -721,7 +721,7 @@ function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
       if (d && !d.air && !q.nun && q.onGround && e.onGround && q.sw && Math.abs(e.x - q.x) < 82 * e.scale) {
         q.sw = null; q.queued = null; q.atkCool = 0.08; q.lockT = e.lockT = 0.42; q.vx = 0; e.vx = 0; e.blockT = 0; e.cool = Math.max(e.cool, 0.55);
         q.lockE = e;
-      }
+      } else if ((e.type === 'duelist' || e.boss) && !e.dummy && Math.random() < (e.boss ? 0.6 : 0.45)) { e.cool = Math.min(e.cool, 0.14); e.counter = true; } // kaeshi: receive and return in one motion
     }
     return false;
   }
@@ -1067,7 +1067,7 @@ function updateEnemy(e, dt) {
           e.vx = approach(e.vx, hold ? 0 : e.facing * e.speed, 1400 * dt);
         } else {
           e.vx = approach(e.vx, dist < range * 0.5 ? -e.facing * e.speed * 0.5 : 0, 1500 * dt);
-          if (e.cool <= 0 && busy < 2 && e.onGround) { e.lastEnd = (GUARDS[e.guard] || GUARDS.chudan).cat; enemyBegin(e, e.windup); e.comboLeft = e.combo; }
+          if (e.cool <= 0 && busy < 2 && e.onGround) { e.lastEnd = (GUARDS[e.guard] || GUARDS.chudan).cat; enemyBegin(e, e.windup * (e.counter ? 0.62 : 1)); e.comboLeft = e.counter ? 1 : e.combo; if (e.counter) { e.counter = false; floatText(e.x, e.y - e.h - 12, 'KAESHI', '#ff6b6b', 13); } }
         }
         break;
       }
