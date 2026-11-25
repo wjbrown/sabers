@@ -576,17 +576,20 @@ function updateFeet(e, dt) {
   const sb = e.sab, w = sb && sb.w || 0;
   const home = [e.x + f * (w ? lerp(-16, sb.rf, w) : -16) * s, e.x + f * (w ? lerp(15, sb.ff, w) : 15) * s];
   const ahead = keyed ? Math.min(sp * 0.03, 12) * s : clamp(sp * 0.13, 0, 17) * s, thresh = keyed ? 6 * s : Math.max((sp < 20 ? 6 : 10) * s, ahead * 0.7);
+  // okuri-ashi: in stance the foot nearest the direction of travel moves first and the other is drawn up behind it,
+  // so the feet never pass each other; suri-ashi: they slide, barely leaving the floor
+  const okuri = !keyed && !reeling && sp > 20, lead = e.vx * f >= 0 ? 1 : 0;
   for (let n = 0; n < 2; n++) {
-    const i = n ? F.last : 1 - F.last, o = 1 - i; if (F.t[i] < 1) continue;
+    const i = okuri ? (n ? 1 - lead : lead) : n ? F.last : 1 - F.last, o = 1 - i; if (F.t[i] < 1) continue;
     const err = Math.abs(home[i] - F.x[i]);
     if (err > thresh && (F.t[o] >= 1 || (F.t[o] > 0.5 && err > thresh * 1.5))) {
-      F.t[i] = 0; F.sx[i] = F.x[i]; F.last = i; F.d = clamp(0.19 - sp / 3000, 0.085, 0.19) * (0.75 + 0.25 * s); break;
+      F.t[i] = 0; F.sx[i] = F.x[i]; F.last = i; F.slide = okuri; F.d = clamp(0.19 - sp / 3000, 0.085, 0.19) * (0.75 + 0.25 * s); break;
     }
   }
   for (let i = 0; i < 2; i++) if (F.t[i] < 1) {
     const t = F.t[i] = Math.min(1, F.t[i] + dt / F.d), tx = home[i] + e.vx * (1 - t) * F.d + Math.sign(e.vx) * ahead;
     F.x[i] = lerp(F.sx[i], tx, smooth(t));
-    F.lift[i] = t >= 1 ? 0 : Math.sin(Math.PI * t) * clamp(Math.abs(tx - F.sx[i]) * 0.25, 2.5 * s, 10 * s);
+    F.lift[i] = t >= 1 ? 0 : Math.sin(Math.PI * t) * (F.slide ? 1.6 * s : clamp(Math.abs(tx - F.sx[i]) * 0.25, 2.5 * s, 10 * s));
     if (t >= 1 && e.type === 'heavy') dust(F.x[i], GROUND, 2);
   }
 }
