@@ -120,6 +120,7 @@ let player, enemies, bolts, parts, debris, texts, orbs, ghosts;
 let wave, score, hits, hitTimer, queue, spawnT, waveIntro, waveDone, clearT, maxAlive;
 let camX = 0, shake = 0, hitstop = 0, slowT = 0, deadT = 0, flash = 0;
 let upgradeChoices = [], uiRects = [];
+let demo = false; const ai = {};
 let practice = false, drill = 0; const DRILLS = ['STANDS STILL', 'BLOCKS EVERYTHING', 'ATTACKS YOU'], pr = { last: 0, combo: 0, name: '' };
 
 // ── Move set ──────────────────────────────────────────────────────────────────────────────
@@ -499,7 +500,7 @@ function startGame() {
   player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = [];
   wave = 0; score = 0; hits = 0; hitTimer = 0; deadT = 0; hitstop = 0; slowT = 0; shake = 0;
   camX = clamp(player.x - viewW / 2, 0, Math.max(0, WORLD - viewW));
-  state = 'play'; paused = false; practice = false; nextWave();
+  state = 'play'; paused = false; practice = false; demo = false; nextWave();
 }
 // Practice: one tireless partner, no waves, nothing to lose. T changes what the partner does.
 function spawnPartner() {
@@ -510,6 +511,88 @@ function spawnPartner() {
 function startPractice() {
   startGame(); practice = true; wave = 0; queue = []; waveIntro = 0; waveDone = false; pr.last = pr.combo = 0; pr.name = '';
   spawnPartner();
+}
+// ── Demo: two computer-controlled fighters ─────────────────────────────────────────────────
+// The rival is an ordinary enemy with more health. The other fighter is the player's own character, driven by a small
+// brain that presses the same keys a person would, so everything it does is something you can do.
+const RIVALS = [['duelist', 'THE DUELIST', 240], ['heavy', 'THE CRUSHER', 330], ['duelist', 'THE DUELIST', 240], ['boss', 'VANTA', 420], ['grunt', 'THE GRUNT', 170]];
+function spawnRival() {
+  const R = RIVALS[ai.round++ % RIVALS.length]; spawn(R[0]); const e = enemies[enemies.length - 1], side = player.x > WORLD / 2 ? -1 : 1;
+  Object.assign(e, { rival: true, name: R[1], maxHp: R[2], hp: R[2], dmg: Math.round(e.dmg * 1.5), x: clamp(player.x + side * 300, 80, WORLD - 80), entered: true, cool: 1 });
+  e.facing = -side; if (e.hover) e.hover = false;
+}
+function startDemo() {
+  startGame(); demo = true; wave = 0; queue = []; waveIntro = 0; waveDone = false;
+  Object.assign(ai, { round: 0, fleeT: 0, plan: null, combo: null, wait: 0.8, stanceT: 1.5, resetT: 0, seen: null, react: null, did: false, air: false, bind: false, gap: 0, deadT: 0, rush: null });
+  spawnRival();
+}
+const AI_PLANS = [[1, 'F', 'R', 'R'], [1, 'F', 'F', 'F'], [1, 'C', 'R'], [2, 'R', 'R', 'F'], [2, 'R'], [3, 'F', 'R'], [3, 'R', 'F', 'F'], [3, 'C', 'R', 'R'], [4, 'R', 'R', 'R'], [4, 'F', 'C'],
+  [5, 'F', 'R'], [5, 'C', 'F', 'R'], [6, 'R', 'R'], [6, 'F', 'R'], [6, 'C', 'F'], [7, 'F', 'C'], [7, 'R', 'F'], [8, 'R', 'F', 'F'], [0, 'C', 'C', 'C'], [0, 'R'], [0, 'F'], [0, 'E']];
+function demoAI(dt) {
+  keys.clear(); pressed.clear();
+  const p = player, e = nearestEnemy(4000); if (!e) return;
+  const dx = e.x - p.x, dist = Math.abs(dx), toward = dx > 0 ? 'KeyD' : 'KeyA', away = dx > 0 ? 'KeyA' : 'KeyD';
+  const tap = c => { pressed.add(c); keys.add(c); }, hold = c => keys.add(c), ATK = { R: 'KeyR', F: 'KeyF', C: 'KeyC' }, anyAtk = () => ATK['RFC'[Math.floor(rand(3))]];
+  const KM = kamaeOf(p), stance = n => { const g = KM[(n - 1) % KM.length]; if (p.hold !== g) tap('Digit' + (KM.indexOf(g) + 1)); };
+  ai.wait -= dt; ai.stanceT -= dt;
+  if (p.stun > 0) return;
+  // answers that are already owed
+  if (p.riposte > 0 && p.riposte < 0.64) { tap(Math.random() < 0.65 ? 'KeyR' : 'KeyF'); return; }                 // rising parry, then the cut
+  if (p.nuki > 0 && p.dash <= 0 && !p.sw) { tap(Math.random() < 0.7 ? 'KeyF' : 'KeyR'); return; }                 // slipped it: cut the opening
+  if (p.lockT > 0) { if (!ai.bind && p.lockT < 0.26) { ai.bind = true; if (Math.random() < 0.7) { hold(away); tap(Math.random() < 0.5 ? 'KeyR' : 'KeyF'); } } return; }
+  ai.bind = false;
+  if (!p.onGround) { if (ai.air && p.vy > -260) { ai.air = false; tap(anyAtk()); } else if (ai.rush === 'leap') hold(toward); return; }
+  // an attack is coming: choose one way of dealing with it and see it through
+  const threat = e.melee && e.sw && e.sw.def && (e.state === 'windup' || e.state === 'swing') && !e.sw.struck && dist < e.reach * 1.3 + 40;
+  if (threat) {
+    const spd = 0.7 / (E_SWING[e.type] || 0.3), hk = e.sw.def.hitK || 0.52;
+    const tth = e.state === 'windup' ? e.stateT + (hk - 0.3) / spd : Math.max(0, (hk - e.sw.t) / spd);
+    if (ai.seen !== e.sw) {
+      ai.seen = e.sw; ai.did = false; ai.combo = null; ai.plan = null;
+      const low = e.sw.def.h === 'low', r = Math.random();
+      ai.react = low && r < 0.4 ? 'jump' : r < 0.24 ? 'parry' : r < 0.34 ? 'block' : r < 0.48 ? 'nuki' : r < 0.6 ? 'counter' : r < 0.7 && tth > 0.3 ? 'debana' : r < 0.77 ? 'back' : 'none'; // sometimes simply too slow
+    }
+    const busy = p.sw && !p.sw.def.noHit;
+    if (ai.react === 'parry') { if (tth < 0.14 && !busy) hold('KeyQ'); }
+    else if (ai.react === 'block') { if (!busy) hold('KeyQ'); }
+    else if (ai.react === 'nuki') { if (tth < 0.17 && !ai.did) { ai.did = true; hold(toward); tap('ShiftLeft'); } }
+    else if (ai.react === 'counter') { if (tth < 0.11 && !ai.did && !busy) { ai.did = true; tap('KeyR'); } }
+    else if (ai.react === 'debana') { if (!ai.did && !busy) { ai.did = true; tap(Math.random() < 0.5 ? 'KeyR' : 'KeyF'); } }
+    else if (ai.react === 'jump') { if (tth < 0.2 && !ai.did) { ai.did = true; ai.air = true; tap('KeyW'); } }
+    else if (ai.react === 'back') { hold(away); hold('KeyQ'); }
+    return;
+  }
+  // mid-combo: feed the next press once the current cut is under way
+  if (p.sw && !p.sw.def.noHit) {
+    if (ai.combo && ai.combo.length && swK(p.sw) > 0.42 && !p.queued) tap(ATK[ai.combo.shift()]);
+    if (ai.combo && !ai.combo.length) { ai.combo = null; const r = Math.random(); if (r < 0.22) { ai.fleeT = 0.8; ai.rush = Math.random() < 0.75 ? 'run' : 'leap'; } else if (r < 0.7) ai.resetT = rand(0.35, 0.9); }
+    return;
+  }
+  if (ai.stanceT <= 0 && !ai.plan) { ai.stanceT = rand(3, 7); if (Math.random() < 0.6) stance(1 + Math.floor(rand(8))); else if (p.hold) tap('Digit' + (KM.indexOf(p.hold) + 1)); }
+  if (ai.fleeT > 0) { ai.fleeT -= dt; hold(away); return; }                                                        // run right out, to come back in at speed
+  if (ai.resetT > 0) { ai.resetT -= dt; hold(away); hold('KeyQ'); return; }                                          // break off and reset the distance
+  if (ai.plan) {                                                                                                   // stance taken: now strike
+    if (ai.wait > 0) return;
+    if (dist > 150) { ai.plan = null; return; }
+    const first = ai.plan.shift();
+    if (first === 'E') { tap('KeyE'); ai.plan = null; ai.wait = 0.5; return; }
+    tap(ATK[first]); ai.combo = ai.plan; ai.plan = null; return;
+  }
+  if (dist > 290 && !ai.rush) {                                                                                                // far: run in, sometimes straight into an attack
+    ai.rush = Math.random() < 0.45 ? 'run' : Math.random() < 0.4 ? 'leap' : Math.random() < 0.5 ? 'dash' : 'walk';
+  }
+  if (ai.rush === 'walk' || (ai.rush && dist > 290)) { hold(toward); if (ai.rush === 'walk' && dist < 200) ai.rush = null; return; }
+  if (ai.rush === 'run' && dist > 110) { hold(toward); if (dist < 190 && Math.abs(p.vx) > 240) { tap(anyAtk()); ai.rush = null; } return; }
+  if (ai.rush === 'leap' && dist > 110) { hold(toward); if (dist < 230) { tap('KeyW'); ai.air = true; } return; }
+  if (ai.rush === 'dash' && dist > 150) { hold(toward); if (dist < 260 && p.dashCool <= 0) { tap('ShiftLeft'); ai.rush = null; } return; }
+  ai.rush = null;
+  if (dist > 128) { hold(toward); hold('KeyQ'); return; }                                                          // close the last steps in guard
+  if (p.atkCool <= 0 && ai.wait <= 0 && (e.state === 'chase' || e.state === 'recover' || e.state === 'stun' || e.state === 'hit')) {
+    const P = AI_PLANS[Math.floor(rand(AI_PLANS.length))].slice(), n = P.shift();
+    if (P[0] === 'E' && p.en < 40) return;
+    if (n) { stance(n); ai.wait = 0.34; ai.stanceT = rand(3, 6); } else ai.wait = 0.05;
+    ai.plan = P;
+  }
 }
 function peekMove(p, h) { // what this stance would throw right now
   const G = guardOf(p); if (G.pref && G.pref[h]) return G.pref[h];
@@ -908,6 +991,7 @@ function doPush() {
 // ───────────────────────── player update ─────────────────────────
 function updatePlayer(dt) {
   const p = player; if (p.hp <= 0) return;
+  if (demo) demoAI(dt);
   p.animT += dt; p.invuln -= dt; p.hitFlash -= dt; p.dashCool -= dt; p.pushCool -= dt; p.atkCool -= dt;
   if (p.comboTimer > 0) { p.comboTimer -= dt; if (p.comboTimer <= 0) p.comboIdx = 0; }
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
@@ -1113,6 +1197,7 @@ function enemyBegin(e, windT) {
   if (byGap.length) C = byGap;
   const def = C[Math.floor(rand(C.length))];
   e.sw = Object.assign(beginSwing(e, def, 1), { struck: false }); e.lastEnd = def.end;
+  if (demo && (def.nm || def.lb)) floatText(e.x, e.y - e.h - 14, def.nm || def.lb, '#ff9a9a', 12);
   setState(e, 'windup', windT);
 }
 function updateEnemy(e, dt) {
@@ -1267,6 +1352,9 @@ function step(dt) {
     if (p.hp > 0) { p.hp = p.maxHp; p.en = p.maxEn; }
     for (const e of enemies) if (e.dummy) { e.block = drill === 1 ? 1 : drill === 2 ? 0.3 : 0; e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.25 * dt); }
     if (!enemies.length) spawnPartner();
+  } else if (demo) { // a run of duels: whoever falls is replaced after a pause
+    if (p.hp <= 0) { ai.deadT += dt; if (ai.deadT > 2.4) { const x = p.x; player = newPlayer(); player.x = x; ai.deadT = 0; ai.seen = null; ai.plan = ai.combo = null; for (const e of enemies) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.5); } }
+    else if (!enemies.length) { ai.gap += dt; if (ai.gap > 2.6) { ai.gap = 0; p.hp = p.maxHp; spawnRival(); } }
   } else if (p.hp > 0) {
     if (waveIntro > 0) waveIntro -= dt;
     else if (queue.length && enemies.length < maxAlive) { spawnT -= dt; if (spawnT <= 0) { spawn(queue.shift()); spawnT = rand(0.6, 1.4); } }
@@ -1569,7 +1657,8 @@ function drawHUD() {
     KM.forEach((g, i) => { const on = g === p.guard, x = 24 + i * 20;
       ctx.fillStyle = on ? p.blade : g === p.hold ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'; ctx.fillRect(x, 132, 16, 16);
       text(String(i + 1), x + 8, 144, 11, on ? '#111' : '#aaa'); }); }
-  if (practice) {
+  if (demo) { text('DEMO', viewW - 24, 36, 20, '#fff', 'right'); text('computer vs computer', viewW - 24, 56, 12, '#ffd23a', 'right', 600); text('Esc  back to title', viewW - 24, 72, 12, '#aaa', 'right', 600); }
+  else if (practice) {
     text('PRACTICE', viewW - 24, 36, 20, '#fff', 'right');
     text('T  partner: ' + DRILLS[drill], viewW - 24, 58, 12, '#ffd23a', 'right', 600); text('Esc  back to title', viewW - 24, 74, 12, '#aaa', 'right', 600);
     if (pr.last) text(pr.name + '  ' + Math.round(pr.last) + '   ·   combo ' + Math.round(pr.combo), viewW / 2, 40, 16, '#fff');
@@ -1584,7 +1673,7 @@ function drawHUD() {
     tech.forEach((l, i) => text(l, viewW - 24, 126 + i * 17, 12, '#b9b6d6', 'right', 600));
   } else { text('WAVE ' + wave, viewW - 24, 36, 20, '#fff', 'right'); text(String(score).padStart(6, '0'), viewW - 24, 60, 18, '#ffd23a', 'right'); }
   if (hits > 1) { const pop = 1 + clamp(hitTimer - 2.3, 0, 0.2) * 2; text(hits + ' HITS', viewW - 24, 100, 22 * pop, p.blade, 'right'); bar(viewW - 124, 108, 100, 3, hitTimer / 2.5, p.blade); }
-  const boss = enemies.find(e => e.boss || e.dummy);
+  const boss = enemies.find(e => e.boss || e.dummy || e.rival);
   if (boss) { const w = Math.min(520, viewW - 80); text(boss.name, viewW / 2, VIEW_H - 46, 13, '#ff6b6b'); bar(viewW / 2 - w / 2, VIEW_H - 38, w, 10, boss.hp / boss.maxHp, '#ff2a2a', 'rgba(255,255,255,0.15)'); }
   // offscreen indicators
   ctx.fillStyle = '#ff4d4d';
@@ -1631,6 +1720,10 @@ function drawTitle() {
     ctx.fillStyle = 'rgba(40,34,80,0.6)'; ctx.fillRect(x, y, w, 24); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, 24);
     text('P  ·  PRACTICE MODE', viewW / 2, y + 16, 12, '#cfcfe6');
     uiRects.push({ x, y, w, h: 24, fn: () => { sfx('ui'); pressed.clear(); startPractice(); } }); }
+  { const w = 190, x = viewW / 2 - w / 2, y = 362;
+    ctx.fillStyle = 'rgba(40,34,80,0.6)'; ctx.fillRect(x, y, w, 24); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, 24);
+    text('V  ·  WATCH A DEMO', viewW / 2, y + 16, 12, '#cfcfe6');
+    uiRects.push({ x, y, w, h: 24, fn: () => { sfx('ui'); pressed.clear(); startDemo(); } }); }
   const c = '#cfcfe6';
   text('A / D  move      W / Space  jump (double)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
@@ -1684,10 +1777,11 @@ function update(rdt) {
     if (hit('ArrowLeft', 'KeyA')) { bladeIdx = (bladeIdx + BLADES.length - 1) % BLADES.length; store.set('ss_blade', String(bladeIdx)); sfx('ui'); }
     if (hit('KeyT')) toggleTurtle();
     if (hit('KeyP')) { sfx('ui'); pressed.clear(); startPractice(); }
+    if (hit('KeyV')) { sfx('ui'); pressed.clear(); startDemo(); }
     if (hit('ArrowRight', 'KeyD')) { bladeIdx = (bladeIdx + 1) % BLADES.length; store.set('ss_blade', String(bladeIdx)); sfx('ui'); }
     if (!clickUI() && hit('Enter', 'Space', 'Mouse0')) { sfx('ui'); pressed.clear(); startGame(); }
   } else if (state === 'play') {
-    if (practice && hit('Escape')) { state = 'title'; practice = false; paused = false; }
+    if ((practice || demo) && hit('Escape')) { state = 'title'; practice = false; demo = false; paused = false; keys.clear(); }
     else if (hit('KeyP', 'Escape')) paused = !paused;
     if (practice && !paused && hit('KeyT')) { drill = (drill + 1) % DRILLS.length; sfx('ui'); }
     if (!paused) {
@@ -1711,6 +1805,7 @@ function frame(ts) {
 }
 player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = []; queue = [];
 if (typeof location !== 'undefined' && /[?&]practice\b/.test(location.search || '')) startPractice();
+if (typeof location !== 'undefined' && /[?&]demo\b/.test(location.search || '')) startDemo();
 requestAnimationFrame(frame);
 </script>
 </body>
