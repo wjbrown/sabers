@@ -565,6 +565,7 @@ function saberTarget(e) {
     const h = d && d.hand ? d.hand(k) : [Math.cos(ha) * 25, Math.sin(ha) * 25 + 4];
     return { a, hx: h[0], hy: h[1], two: 1, snap: true };
   }
+  if (e.clashT > 0) { const C = CLASH_POSE[e.clashH] || CLASH_POSE.mid; return { a: C.a + Math.sin(t * 70) * 0.03, hx: C.hx, hy: C.hy, two: 1, snap: true }; }
   if (e.zan > 0 && !e.blocking) return { a: 0.2 + Math.sin(t * 1.5) * 0.03, hx: 21, hy: 15 + Math.sin(t * 1.9), two: 1, rate: 5.5 }; // point held on the fallen opponent, unhurried
   if (e.lockT > 0) return { a: -1.3 + Math.sin(t * 38) * 0.035, hx: 24 + Math.sin(t * 9) * 1.5, hy: 11, two: 1, rate: 34 }; // guards locked, hands kept low, blades crossed upright
   if (e.gun) { const ha = e.aim * 0.55; return { a: e.aim, hx: Math.cos(ha) * 22, hy: Math.sin(ha) * 22 + 4, two: 1, snap: true }; }
@@ -844,6 +845,7 @@ function enemyStrike(e, aoe) {
   const inRange = aoe ? Math.abs(p.x - e.x) < 120 && p.y > GROUND - 50 : (d && d.around ? Math.abs(dx) < reach : dx > -18 && dx < reach) && Math.abs(p.y - e.y) < 85;
   if (!inRange || p.invuln > 0 || p.dash > 0) return;
   if (!aoe && d && d.h === 'low' && p.y < GROUND - 28) return; // jumped clean over the leg cut
+  if (!aoe && e.blade && playerCutting(e)) { doClash(e); return; }                    // both mid-cut: the blades meet
   const dir = Math.sign(p.x - e.x) || e.facing;
   if (playerGuards(e.x)) {
     const P = pose(p);
@@ -912,6 +914,7 @@ function updatePlayer(dt) {
   if (p.comboTimer > 0) { p.comboTimer -= dt; if (p.comboTimer <= 0) p.comboIdx = 0; }
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
   const stunned = p.stun > 0; if (stunned) p.stun -= dt;
+  if (p.clashT > 0 && (p.clashT -= dt) <= 0) endClash(p, -p.facing, 250);
   p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380); if (p.recoil > 0) p.recoil *= Math.exp(-9 * dt); if (p.hitR > 0) p.hitR *= Math.exp(-5.5 * dt);
   if (p.zan > 0) { p.zan -= dt; if (!p.sw && !mx) p.facing = Math.sign(p.zanX - p.x) || p.facing; if (mx || p.dash > 0 || nearestEnemy(150)) p.zan = 0; if (p.zan <= 0 && !p.hold) { p.guard = 'chudan'; p.guardT = 1.5; } }
   if (p.lockT > 0) { // pressing in the bind; it ends with a shove apart, or sooner if either of us acts
@@ -990,8 +993,9 @@ function updatePlayer(dt) {
         const okX = d.around ? Math.abs(dx) < reach + e.w : dx > -22 && dx < reach + e.w;
         if (okX && e.y > p.y - band[0] && e.y - e.h < p.y + band[1]) {
           s.hitSet.add(e);
+          if (!p.nun && !d.fin && e.melee && e.blade && e.state === 'swing' && e.sw && !e.sw.struck && !(d.h === 'high' && d.nm && e.sw.def.h === 'high')) { doClash(e); break; }
           const deb = e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;
-          const ko = !p.nun && d.h === 'high' && d.nm && e.melee && e.state === 'swing' && e.sw && !e.sw.struck;                // debana: caught as their attack starts
+          const ko = !p.nun && d.h === 'high' && d.nm && e.melee && e.state === 'swing' && e.sw && !e.sw.struck && e.sw.def.h === 'high';                // debana: caught as their attack starts
           if (damageEnemy(e, d.dmg * p.dmgMul * (s.bonus || 1) * (deb ? 1.3 : 1), Math.sign(e.x - p.x) || p.facing, d.kb, d.fin, d.h === 'low', d)) {
             if (d.nm && !s.called) { s.called = true; floatText(p.x + p.facing * 26, p.y - 122, d.nm + '!', '#fff', 15); } // kiai: call the target
             if (deb) floatText(ex, ey - 26, 'DEBANA', '#ffd23a', 13);
@@ -1118,6 +1122,7 @@ function enemyBegin(e, windT) {
 function updateEnemy(e, dt) {
   const p = player, alive = p.hp > 0, dx = p.x - e.x, dist = Math.abs(dx);
   e.animT += dt; e.hitFlash -= dt; e.cool -= dt; if (e.blockT > 0) e.blockT -= dt;
+  if (e.clashT > 0 && (e.clashT -= dt) <= 0) endClash(e, -e.facing, e.armor ? 130 : 260);
   if (e.swept > 0) e.swept -= dt;
   if (e.recoil > 0) e.recoil *= Math.exp(-9 * dt);
   if (e.hitR > 0) e.hitR *= Math.exp(-5.5 * dt);
@@ -1219,7 +1224,59 @@ function updateEnemy(e, dt) {
 }
 
 // ───────────────────────── world step ─────────────────────────
+// ── Blade against blade ──────────────────────────────────────────────────────────────────
+// While both fighters are mid-cut their blades are real: if the two blades cross, or one cuts through the path the other's
+// tip has just travelled, the cuts stop each other. Neither lands; both fighters are thrown back off the contact.
+function segHit(a, b, c, d) {
+  const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y, den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-6) return null;
+  const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den, u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { x: a.x + rx * t, y: a.y + ry * t } : null;
+}
+const CLASH_POSE = { high: { a: -1.02, hx: 27, hy: -9 }, mid: { a: -0.5, hx: 29, hy: 5 }, low: { a: 0.45, hx: 26, hy: 15 } };
+function doClash(e) {
+  const p = player, dir = Math.sign(e.x - p.x) || p.facing, heavy = e.armor ? 0.5 : 1;
+  // both blades are thrown onto the point of contact and held there for an instant before the fighters come apart
+  const h = e.sw && e.sw.def && e.sw.def.h || p.sw && p.sw.def.h || 'mid', C = CLASH_POSE[h] || CLASH_POSE.mid;
+  p.facing = dir; e.facing = -dir;
+  for (const q of [p, e]) { q.clashT = 0.13; q.clashH = h; q.recoil = 1; if (q.sab) Object.assign(q.sab, { a: C.a, hx: C.hx, hy: C.hy, two: 1 }); }
+  p.sw = null; p.queued = null; p.atkCool = 0.2; p.bufT = 0; p.comboIdx = 0; p.vx = -dir * 120; p.lockT = 0;
+  e.sw = null; e.comboLeft = 0; setState(e, 'recover', e.armor ? 0.36 : 0.48); e.cool = Math.max(e.cool, 0.4); e.vx = dir * 120 * heavy;
+  const A = pose(p), B = pose(e), at = segHit(A.hand, A.tip, B.hand, B.tip) || { x: (A.tip.x + B.tip.x) / 2, y: (A.tip.y + B.tip.y) / 2 };
+  sparks(at.x, at.y, 22, '#fff', 560); sparks(at.x, at.y, 10, p.blade, 420); sparks(at.x, at.y, 10, e.blade, 420);
+  sfx('clash'); sfx('parry'); hitstop = Math.max(hitstop, 0.085); shake = Math.max(shake, 8); flash = Math.max(flash, 0.08);
+  floatText(at.x, at.y - 26, 'CLASH', '#fff', 18); p.en = Math.min(p.maxEn, p.en + 6);
+}
+// the contact is over: the blades spring off each other and the fighters are driven apart
+function endClash(q, dir, push) { q.clashT = 0; q.vx = dir * push; if (q.sab) { q.sab.a -= 0.95; q.sab.hx -= 10; q.sab.hy -= 4; } }
+// Is the player in the middle of a cut that could meet an incoming one? (Finishers are not stopped; they go through.)
+function playerCutting(e) {
+  const p = player, s = p.sw, d = s && s.def; if (!s || !d.keys || d.noHit || d.fin || p.nun || p.hp <= 0) return false;
+  const k = swK(s); return k > 0.15 && k < (d.act || ACT)[1] && (d.around || (e.x - p.x) * p.facing > 0);
+}
+function bladeOf(e) { const P = pose(e), cur = { h: P.hand, t: P.tip }, prev = e.bl && e.blN === frameN - 1 ? e.bl : cur; e.bl = cur; e.blN = frameN; return [cur, prev]; }
+let frameN = 0;
+function checkClash() {
+  frameN++;
+  const p = player, s = p.sw, d = s && s.def;
+  const pLive = s && d.keys && !d.noHit && !d.fin && !p.nun && p.hp > 0 && (k => k > (d.act || ACT)[0] - 0.14 && k < (d.act || ACT)[1])(swK(s));
+  const [pc, pp] = pLive ? bladeOf(p) : [null, null];
+  for (const e of enemies) {
+    const live = e.melee && e.blade && e.state === 'swing' && e.sw && e.sw.def && !e.sw.struck;
+    if (!live) continue;
+    const [ec, ep] = bladeOf(e);
+    if (!pLive || Math.abs(e.x - p.x) > 190 * e.scale) continue;
+    // kiri-otoshi stays the exception: a men cut straight down the centre goes through another overhead cut instead of stopping on it
+    if (d.h === 'high' && d.nm && e.sw.def.h === 'high') continue;
+    const pS = [[pc.h, pc.t], [pp.t, pc.t]], eS = [[ec.h, ec.t], [ep.t, ec.t]];
+    let at = null; for (const a of pS) for (const b of eS) at = at || segHit(a[0], a[1], b[0], b[1]);
+    if (!at) continue;
+    doClash(e);
+    return;
+  }
+}
 function step(dt) {
+  checkClash();
   updatePlayer(dt);
   for (const e of enemies.slice()) updateEnemy(e, dt);
   const p = player;
@@ -1577,7 +1634,7 @@ function drawHUD() {
     text('from this stance:   R  ' + nmOf('high') + '      F  ' + nmOf('mid') + '      C  ' + nmOf('low'), 24, 170, 12, '#cfcfe6', 'left', 600);
     const tech = p.nun ? ['whirls hit more than once', 'third hit of a combo: finisher', 'Q just before impact: parry', 'dash through an attack, then strike: NUKI', 'back + attack up close: retreating strike'] : [
       'Q just before impact  —  rising parry; then R: men', 'dash through an attack, then strike  —  NUKI (F: flank cut)', 'hit them in their wind-up  —  DEBANA',
-      'men while their cut is already falling  —  KIRI-OTOSHI', 'blocked up close  —  bind; back + attack: retreating strike', 'stance 6, R  —  sweep their blade, then men (beats blockers)',
+      'cut into their cut  —  the blades CLASH, nobody is hit', 'men into their overhead cut  —  KIRI-OTOSHI, yours goes through', 'blocked up close  —  bind; back + attack: retreating strike', 'stance 6, R  —  sweep their blade, then men (beats blockers)',
       'R, R  —  men, then diagonal men', 'stance 1: F, R  /  F, F  —  kote-men  /  kote-do', 'run + F  —  one-handed thrust', 'third hit of a combo  —  finisher'];
     ctx.fillStyle = 'rgba(5,4,12,0.62)'; ctx.fillRect(viewW - 462, 92, 450, 30 + tech.length * 17);
     text('TECHNIQUES', viewW - 24, 108, 11, '#888', 'right');
