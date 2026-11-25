@@ -1539,7 +1539,13 @@ function drawHUD() {
     if (pr.last) text(pr.name + '  ' + Math.round(pr.last) + '   ·   combo ' + Math.round(pr.combo), viewW / 2, 40, 16, '#fff');
     const nmOf = h => { const d = peekMove(p, h); return d.nm || d.lb || 'CUT'; };
     text('from this stance:   R  ' + nmOf('high') + '      F  ' + nmOf('mid') + '      C  ' + nmOf('low'), 24, 170, 12, '#cfcfe6', 'left', 600);
-    text((p.nun ? 'whirls hit more than once' : 'F→R kote-men   ·   F→F kote-do') + '   ·   third hit: finisher   ·   back + attack up close: retreating strike   ·   Q just before impact: parry, then strike   ·   dash through an attack, then strike', viewW / 2, VIEW_H - 16, 12, '#cfcfe6', 'center', 600);
+    const tech = p.nun ? ['whirls hit more than once', 'third hit of a combo: finisher', 'Q just before impact: parry', 'dash through an attack, then strike: NUKI', 'back + attack up close: retreating strike'] : [
+      'Q just before impact  —  rising parry; then R: men', 'dash through an attack, then strike  —  NUKI (F: flank cut)', 'hit them in their wind-up  —  DEBANA',
+      'men while their cut is already falling  —  KIRI-OTOSHI', 'blocked up close  —  bind; back + attack: retreating strike', 'stance 6, R  —  sweep their blade, then men (beats blockers)',
+      'R, R  —  men, then diagonal men', 'stance 1: F, R  /  F, F  —  kote-men  /  kote-do', 'run + F  —  one-handed thrust', 'third hit of a combo  —  finisher'];
+    ctx.fillStyle = 'rgba(5,4,12,0.62)'; ctx.fillRect(viewW - 462, 92, 450, 30 + tech.length * 17);
+    text('TECHNIQUES', viewW - 24, 108, 11, '#888', 'right');
+    tech.forEach((l, i) => text(l, viewW - 24, 126 + i * 17, 12, '#b9b6d6', 'right', 600));
   } else { text('WAVE ' + wave, viewW - 24, 36, 20, '#fff', 'right'); text(String(score).padStart(6, '0'), viewW - 24, 60, 18, '#ffd23a', 'right'); }
   if (hits > 1) { const pop = 1 + clamp(hitTimer - 2.3, 0, 0.2) * 2; text(hits + ' HITS', viewW - 24, 100, 22 * pop, p.blade, 'right'); bar(viewW - 124, 108, 100, 3, hitTimer / 2.5, p.blade); }
   const boss = enemies.find(e => e.boss || e.dummy);
