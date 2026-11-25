@@ -281,6 +281,14 @@ const HARAI_MEN = mv({ nm: 'MEN', harai: true, dur: 0.38, h: 'high', from: 'mid'
   [0.7, { a: -0.2, h: [32, -8], lean: 0.26, cr: 9, hip: 9 }, 'out'],
   [0.88, { a: -0.3, h: [30, -7], lean: 0.16, cr: 6, hip: 10, rf: -10, ff: 28 }],
   [1, { a: -0.5, h: [16, 20], lean: 0.14, cr: 6, hip: 3, rf: -17, ff: 17 }]]);
+// sayu-men — the diagonal men of kirikaeshi: the hands go back up over the head every time, and the blade comes down at
+// about 45 degrees onto the temple, on a short following step (okuri-ashi), ready to go straight up again
+const SAYU_MEN = mv({ nm: 'SAYU-MEN', dur: 0.26, h: 'high', from: 'hi', end: 'hi', dmg: 13, reach: 88, lunge: 400, kb: 150, act: [0.42, 0.68], cancel: 0.7 }, [
+  [0.24, { a: -2.5, h: [5, -30], lean: -0.04, cr: 4, hip: 0, rf: -15, ff: 13 }, 'out'],
+  [0.40, { a: -2.1, h: [14, -27], lean: 0.08, cr: 5, hip: 4, ff: 21, fl: 5 }],
+  [0.54, { a: -0.5, h: [29, -13], lean: 0.2, cr: 8, hip: 7, rf: -19, ff: 25 }, 'in'],
+  [0.64, { a: -0.42, h: [30, -12], lean: 0.2, cr: 8, hip: 8 }, 'out'],
+  [1, { a: -2.2, h: [9, -27], lean: 0.04, cr: 5, hip: 3, rf: -13, ff: 17 }]]);
 // hiki-waza — struck from close quarters while springing backward
 const HIKI = {
   high: mv({ hitK: 0.42, nm: 'HIKI-MEN', dur: 0.3, h: 'high', end: 'mid', dmg: 12, reach: 84, lunge: -520, stepK: 0.44, carry: 900, kb: 170, act: [0.28, 0.56] }, [
@@ -299,7 +307,7 @@ const HIKI = {
 HIKI.low = HIKI.mid;
 // renzoku-waza (kote-men, kote-do, men-do, tsuki-men) and the strike each kamae is built to throw
 { const [MEN, , MEN_S] = MOVES.high, [DO, , TSUKI, KOTE] = MOVES.mid;
-  KOTE.next = { high: MEN_S, mid: DO }; MEN_S.next = { high: MEN, mid: DO }; TSUKI.next = { high: MEN_S };
+  KOTE.next = { high: MEN_S, mid: DO }; MEN.next = { high: SAYU_MEN }; JODAN_MEN.next = { high: SAYU_MEN }; HARAI_MEN.next = { high: SAYU_MEN }; MEN_S.next = { high: MEN, mid: DO }; TSUKI.next = { high: MEN_S };
   GUARDS.chudan.pref = { mid: KOTE }; GUARDS.seigan.pref = { mid: TSUKI, high: HARAI_MEN }; GUARDS.kasumi.pref = { mid: TSUKI, low: MOVES.low[2] };
   GUARDS.jodan.pref = { high: JODAN_MEN }; GUARDS.gedan.pref = { mid: TSUKI, low: MOVES.low[1] }; GUARDS.waki.pref = { low: MOVES.low[0] }; }
 // ── Nunchaku ──────────────────────────────────────────────────────────────────────────────
