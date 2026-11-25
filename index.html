@@ -160,6 +160,8 @@ function swK(sw) {
   const K0 = sw.def.keys[0].k; return k < sw.c ? k / sw.c * K0 : K0 + (k - sw.c) / (1 - sw.c) * (1 - K0);
 }
 function quicken(sw, keep) { const K0 = sw.def.keys[0].k, sc = 1 - K0 + K0 * keep; sw.dur = sw.def.dur * sc; sw.c = K0 * keep / sc; }
+// how much the second hand is on the hilt: a one-handed technique lets go as it extends and takes the grip back after
+function swTwo(e, sw) { if (e.nun) return 0; if (!sw.def.one) return 1; const k = swK(sw); return 1 - clamp(Math.min(k - 0.22, 0.9 - k) / 0.12, 0, 1); }
 function evalSwing(sw) {
   const d = sw.def, K = d.keys, k = swK(sw);
   let A = sw.from, k0 = 0, i = 0;
@@ -409,8 +411,16 @@ const FIN = {
     [0.84, { a: 0.45, h: [28, 18], lean: 0.35, cr: 21 }],
     [1, { a: 0.2, h: [18, 16], lean: 0.3, cr: 14, hip: 2, rf: -21, ff: 22 }]])
 };
+// katate-tsuki — the one-handed thrust: one hand lets go so the other arm and shoulder can reach right through. It
+// carries further than the two-handed thrust and hits less hard; thrown here off a run.
+const KATATE = mv({ nm: 'KATATE-TSUKI', one: true, dur: 0.34, h: 'mid', from: 'mid', end: 'mid', dmg: 12, reach: 122, lunge: 680, kb: 220, act: [0.36, 0.72] }, [
+  [0.24, { a: -0.2, h: [-8, 12], lean: -0.04, cr: 9, hip: -6, rf: -13, ff: 9 }, 'out'],
+  [0.38, { a: -0.08, h: [14, 6], lean: 0.28, cr: 11, hip: 3, rf: -19, ff: 23, fl: 8 }],
+  [0.5, { a: 0.0, h: [34, 1], lean: 0.58, cr: 15, hip: 10, rf: -26, ff: 32 }, 'in'],
+  [0.76, { a: 0.0, h: [33, 2], lean: 0.54, cr: 15 }],
+  [1, { a: -0.4, h: [17, 12], lean: 0.24, cr: 9, hip: 4, rf: -21, ff: 22 }]]);
 const RUN = {
-  high: FIN.high, mid: MOVES.mid[2],
+  high: FIN.high, mid: KATATE,
   // knee slide: both legs shoot forward, torso laid back, blade carried low ahead
   low: mv({ dur: 0.4, auth: true, h: 'low', dmg: 11, reach: 94, lunge: 660, stepK: 0.08, carry: 900, kb: 140, trip: true, act: [0.14, 0.86] }, [
     [0.14, { a: 0.9, h: [10, 20], lean: -0.2, cr: 15, rf: -6, ff: 20 }, 'out'],
@@ -572,7 +582,7 @@ function saberTarget(e) {
   return { a: g.a + Math.sin(t * 1.7) * 0.045 + Math.sin(t * 2.9) * 0.02, hx: g.hx + Math.sin(t * 1.3) * 1.5, hy: g.hy + Math.cos(t * 1.7) * 1.6, two: e.nun ? 0 : 1, rate: 7.5 };
 }
 function updateSaber(e, dt) {
-  if (e.sw && e.sw.def && e.sw.def.keys) { e.sab = Object.assign(evalSwing(e.sw), { two: e.nun ? 0 : 1, w: 1 }); return; }
+  if (e.sw && e.sw.def && e.sw.def.keys) { e.sab = Object.assign(evalSwing(e.sw), { two: swTwo(e, e.sw), w: 1 }); return; }
   if (e.blade) { // don't wait in one guard
     e.guardT = (e.guardT || 0) - dt;
     if (e.guardT <= 0) {
@@ -638,7 +648,7 @@ function limit(a, b, L) { const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(d
 function pose(e) {
   const s = e.scale, f = e.facing, t = e.animT;
   const sw = e.sw, m = sw && sw.def || null, k = sw ? (m && m.keys ? swK(sw) : clamp(sw.t / sw.dur, 0, 1)) : 0;
-  const sb = e.sab || (m && m.keys ? Object.assign(evalSwing(sw), { two: e.nun ? 0 : 1, w: 1 }) : saberTarget(e));
+  const sb = e.sab || (m && m.keys ? Object.assign(evalSwing(sw), { two: swTwo(e, sw), w: 1 }) : saberTarget(e));
   const w = sb.w || 0, win = r => r ? clamp((k - r[0]) / (r[1] - r[0]), 0, 1) : k;
   const hopY = hopOf(e), grounded = e.onGround && hopY < 3;
   const F = e.ft, planted = !!(F && F.on) && grounded;
