@@ -196,8 +196,8 @@ const MOVES = {
       [0.6, { a: 0.1, h: [32, -1], lean: 0.37, cr: 13, hip: 9 }, 'out'],             // tenouchi: the hands wring and the cut stops dead at the target
       [0.82, { a: -0.04, h: [31, -3], lean: 0.2, cr: 8, hip: 11, rf: -11, ff: 29 }],  // yosei + hikitsuke: the body carries on and the rear foot snaps up under it
       [1, { a: -0.5, h: [18, 18], lean: 0.2, cr: 8, hip: 4, rf: -19, ff: 19 }]]),
-    // rising cut from a low guard — load the legs, then drive up through the target
-    mv({ lb: 'RISING CUT', dur: 0.34, h: 'high', from: 'lo', end: 'hi', dmg: 15, reach: 78, lunge: 300, kb: 110, hop: 30, hw: [0.38, 1], launch: 520, act: [0.38, 0.66] }, [
+    // kiri-age — the rising cut from a low guard: load the legs, then drive up through the target
+    mv({ lb: 'KIRI-AGE', dur: 0.34, h: 'high', from: 'lo', end: 'hi', dmg: 15, reach: 78, lunge: 300, kb: 110, hop: 30, hw: [0.38, 1], launch: 520, act: [0.38, 0.66] }, [
       [0.24, { a: 1.35, h: [8, 22], lean: 0.32, cr: 16, hip: 0, rf: -18, ff: 16 }, 'out'],
       [0.42, { a: 0.5, h: [22, 12], lean: 0.18, cr: 8, hip: 5 }, 'in'],
       [0.56, { a: -0.95, h: [25, -17], lean: -0.04, cr: 0, hip: 6 }],
@@ -221,7 +221,7 @@ const MOVES = {
       [0.74, { a: 1.0, h: [15, 22], lean: 0.38, cr: 13, hip: 7 }, 'out'],
       [1, { a: 0.85, h: [13, 22], lean: 0.25, cr: 8, hip: 3, rf: -19, ff: 19 }]]),
     // gyaku-kesa — rising diagonal from a rear low guard, with a passing step (rear leg comes through)
-    mv({ lb: 'RISING DIAGONAL', dur: 0.3, h: 'mid', from: 'lo', end: 'hi', dmg: 12, reach: 84, lunge: 420, kb: 160 }, [
+    mv({ lb: 'GYAKU-KESA', dur: 0.3, h: 'mid', from: 'lo', end: 'hi', dmg: 12, reach: 84, lunge: 420, kb: 160 }, [
       [0.22, { a: 2.1, h: [-8, 20], lean: 0.14, cr: 9, hip: -3, rf: -14, ff: 12 }, 'out'],
       [0.40, { a: 1.2, h: [12, 20], lean: 0.22, cr: 9, hip: 3, rf: 2, rl: 7, ff: -3 }],
       [0.52, { a: 0.05, h: [30, 6], lean: 0.3, cr: 10, hip: 6, rf: 26, ff: -22 }, 'in'],
@@ -244,15 +244,15 @@ const MOVES = {
       [1, { a: -0.5, h: [16, 21], lean: 0.12, cr: 6, hip: 3, rf: -17, ff: 17 }]])
   ],
   low: [
-    // leg cut — drop into a deep lunge and sweep the blade across at shin height
-    mv({ lb: 'LEG CUT', dur: 0.32, h: 'low', from: 'lo', end: 'mid', dmg: 9, reach: 90, lunge: 400, kb: 90, trip: true }, [
+    // sune-giri — the shin cut: drop into a deep lunge and sweep the blade across below the knee
+    mv({ lb: 'SUNE-GIRI', dur: 0.32, h: 'low', from: 'lo', end: 'mid', dmg: 9, reach: 90, lunge: 400, kb: 90, trip: true }, [
       [0.22, { a: 2.5, h: [-6, 21], lean: 0.2, cr: 13, hip: -3, rf: -16, ff: 13 }, 'out'],
       [0.40, { a: 1.7, h: [10, 25], lean: 0.4, cr: 18, hip: 3, ff: 24, fl: 5 }],
       [0.52, { a: 0.55, h: [28, 16], lean: 0.5, cr: 21, hip: 8, rf: -27, ff: 30 }, 'in'],
       [0.74, { a: -0.15, h: [21, 12], lean: 0.46, cr: 20 }, 'out'],
       [1, { a: -0.4, h: [16, 14], lean: 0.3, cr: 12, hip: 3, rf: -21, ff: 22 }]]),
-    // low rising scoop from a point-down guard, passing step, lifting the target
-    mv({ lb: 'LOW SCOOP', dur: 0.32, h: 'low', from: 'lo', end: 'hi', dmg: 10, reach: 84, lunge: 400, kb: 110, trip: true, launch: 280 }, [
+    // liao (jian: an upward slice from below) — from a point-down guard, on a passing step, lifting the target
+    mv({ lb: 'LIAO', dur: 0.32, h: 'low', from: 'lo', end: 'hi', dmg: 10, reach: 84, lunge: 400, kb: 110, trip: true, launch: 280 }, [
       [0.22, { a: 1.9, h: [0, 24], lean: 0.35, cr: 17, hip: -2, rf: -14, ff: 14 }, 'out'],
       [0.42, { a: 1.1, h: [16, 22], lean: 0.4, cr: 17, hip: 3, rf: 3, rl: 6, ff: -4 }],
       [0.54, { a: 0.1, h: [30, 10], lean: 0.36, cr: 14, hip: 7, rf: 26, ff: -24 }, 'in'],
