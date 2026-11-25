@@ -1695,13 +1695,14 @@ function drawFigure(e) {
     let boost = 0;
     if (e.state === 'windup') boost = 1 - e.stateT / e.windT;
     if (e.sw) boost = 0.5;
+    const wind = e.state === 'windup' ? boost : 0;
     if (e.glowN > frameN) boost = Math.max(boost, Math.min(1.4, (e.glowN - frameN) / 9));   // the blade flares where it has just touched another
     const bw = 3.2 * s * (e.bladeW || 1);
     drawBlade(P.hand.x + P.dir.x * 4 * s, P.hand.y + P.dir.y * 4 * s, P.tip.x, P.tip.y, e.blade, bw, boost);
     if (e.twin) drawBlade(back.x, back.y, back.x - P.dir.x * e.bladeLen * s, back.y - P.dir.y * e.bladeLen * s, e.blade, bw, boost);
-    if (e.state === 'windup' && boost > 0.55) {
-      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#fff'; ctx.globalAlpha = (boost - 0.55) * 2; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(P.tip.x, P.tip.y, (1 - boost) * 60 + 4, 0, 6.2832); ctx.stroke(); ctx.restore();
+    if (wind > 0.55) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#fff'; ctx.globalAlpha = Math.min(1, (wind - 0.55) * 2); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(P.tip.x, P.tip.y, Math.max(0, 1 - wind) * 60 + 4, 0, 6.2832); ctx.stroke(); ctx.restore();
     }
   }
   if (e.state === 'stun') {
