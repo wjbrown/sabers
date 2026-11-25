@@ -212,6 +212,8 @@ let turtleMode = clamp(parseInt(store.get('ss_turtle', '0')) || 0, 0, 2);
 if (typeof location !== 'undefined') { const m = /[?&]turtle(?:=(\d))?\b/.exec(location.search || ''); if (m) turtleMode = clamp(parseInt(m[1] || '1'), 0, 2); }
 function toggleTurtle() { turtleMode = (turtleMode + 1) % 3; store.set('ss_turtle', String(turtleMode)); sfx('ui'); }
 let best = parseInt(store.get('ss_best', '0')) || 0;
+let speed = clamp(parseInt(store.get('ss_speed', '80')) || 80, 40, 120), speedT = 0;   // global game speed, percent
+function setSpeed(d) { speed = clamp(speed + d, 40, 120); store.set('ss_speed', String(speed)); speedT = 1.6; sfx('ui'); }
 let state = 'title', paused = false, uiT = 0;
 let player, enemies, bolts, parts, debris, texts, orbs, ghosts;
 let wave, score, hits, hitTimer, queue, spawnT, waveIntro, waveDone, clearT, maxAlive;
@@ -1912,7 +1914,7 @@ function drawTitle() {
   const c = '#cfcfe6';
   text('A / D  move      W / Space  jump (double)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
-  text('Shift  dash through attacks      E  energy push      1–8  hold a stance (same key again: auto)      P  pause      M  mute', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
+  text('Shift  dash through attacks      E  energy push      1–8  hold a stance (same key again: auto)      P  pause      M  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
   if (best) text('BEST ' + best, viewW - 24, 36, 16, '#ffd23a', 'right');
 }
 function drawUpgrade() {
@@ -1945,6 +1947,7 @@ function render() {
   if (state === 'title') return drawTitle();
   ctx.setTransform(z, 0, 0, z, 0, 0); drawBackground();
   drawWorld(); drawHUD();
+  if (speedT > 0) { ctx.globalAlpha = Math.min(1, speedT * 2); text('SPEED ' + speed + '%', viewW / 2, 96, 20, '#fff'); ctx.globalAlpha = 1; }
   if (state === 'upgrade') drawUpgrade();
   if (state === 'over') drawOver();
 }
@@ -1958,6 +1961,7 @@ function clickUI() {
 function update(rdt) {
   uiT += rdt; if (flash > 0) flash -= rdt; shake = Math.max(0, shake - rdt * 45);
   if (hit('KeyM')) muted = !muted;
+  if (hit('BracketLeft', 'Minus')) setSpeed(-10); if (hit('BracketRight', 'Equal')) setSpeed(10); if (speedT > 0) speedT -= rdt;
   audioFrame(rdt);
   if (state === 'title') {
     if (hit('ArrowLeft', 'KeyA')) { bladeIdx = (bladeIdx + BLADES.length - 1) % BLADES.length; store.set('ss_blade', String(bladeIdx)); sfx('ui'); }
@@ -1972,12 +1976,12 @@ function update(rdt) {
     if (practice && !paused && hit('KeyT')) { drill = (drill + 1) % DRILLS.length; sfx('ui'); }
     if (!paused) {
       if (hitstop > 0) hitstop -= rdt;
-      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts); }
+      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts * speed / 100); }
     }
   } else if (state === 'upgrade') {
     if (uiT > 0.35) { if (hit('Digit1')) pickUpgrade(0); else if (hit('Digit2')) pickUpgrade(1); else if (hit('Digit3')) pickUpgrade(2); else clickUI(); }
   } else if (state === 'over') {
-    step(rdt * 0.3);
+    step(rdt * 0.3 * speed / 100);
     if (state === 'over' && uiT > 0.6 && hit('Enter', 'Space', 'Mouse0')) { pressed.clear(); startGame(); }
     else if (hit('Escape')) { state = 'title'; }
   }
