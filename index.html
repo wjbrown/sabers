@@ -659,7 +659,7 @@ function pose(e) {
   const hopY = hopOf(e), grounded = e.onGround && hopY < 3;
   const F = e.ft, planted = !!(F && F.on) && grounded;
   const moving = e.onGround && Math.abs(e.vx) > 30 && !planted, idle = e.onGround && !moving;
-  const bob = (moving ? Math.abs(Math.sin(e.run)) * 3 : Math.sin(t * 2.4) * 2) * (1 - w);
+  const bob = (moving ? Math.abs(Math.sin(e.run + 0.55)) * 3.5 : Math.sin(t * 2.4) * 2) * (1 - w);
   let crouch = idle ? 4 : 0, lean = clamp(e.vx / 420, -1, 1) * 0.35, hipX = idle ? Math.sin(t * 1.2) * 2.5 : 0;
   if (idle) { lean += f * (0.1 + Math.sin(t * 1.2 + 1) * 0.045 + (e.glean || 0)); crouch += e.gcr || 0; }
   if (e.state === 'windup') crouch = 7;
@@ -686,9 +686,15 @@ function pose(e) {
     f1 = { x: e.x - f * lerp(12, -8, tuck) * s - e.vx * 0.015 * (1 - tuck), y: hip.y + lerp(32, 15, tuck) * s };
     f2 = { x: e.x + f * lerp(12, 16, tuck) * s - e.vx * 0.01 * (1 - tuck), y: hip.y + lerp(24, 11, tuck) * s };
   } else if (moving) {
-    const d = Math.sign(e.vx), p = e.run;
-    f1 = { x: e.x - Math.cos(p) * 17 * s * d, y: e.y - Math.max(0, Math.sin(p)) * 12 * s };
-    f2 = { x: e.x - Math.cos(p + Math.PI) * 17 * s * d, y: e.y - Math.max(0, Math.sin(p + Math.PI)) * 12 * s };
+    // Running gait: each foot is on the ground for about a third of the stride and, while it is, stays put in the world
+    // (it travels back under the body at exactly the body's speed); between contacts there is a moment with both feet off
+    // the ground. The stride phase advances with distance, so the contact length is the same at any speed.
+    const d = Math.sign(e.vx), DUTY = 0.34, S = TAU * DUTY / 0.045;
+    const foot = ph => { const u = ((ph / TAU) % 1 + 1) % 1;
+      if (u < DUTY) return { x: e.x + d * (S / 2 - S * u / DUTY), y: e.y };
+      const v = (u - DUTY) / (1 - DUTY);
+      return { x: e.x + d * (-S / 2 + S * smooth(v)), y: e.y - (Math.sin(Math.PI * Math.pow(v, 0.75)) * 15 + 1.5) * s }; };
+    f1 = foot(e.run); f2 = foot(e.run + Math.PI);
   } else { f1 = { x: e.x - f * 16 * s, y: e.y }; f2 = { x: e.x + f * 15 * s, y: e.y }; }
   if (w && grounded && !planted) {
     f1 = { x: lerp(f1.x, e.x + f * sb.rf * s, w), y: lerp(f1.y, e.y - sb.rl * s, w) };
