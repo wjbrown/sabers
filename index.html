@@ -165,8 +165,15 @@ function evalSwing(sw) {
   while (i < K.length && k >= K[i].k) { A = K[i]; k0 = A.k; i++; }
   const B = K[i]; if (!B) return Object.assign({}, A);
   let t = (k - k0) / (B.k - k0);
-  t = B.ease === 'in' ? t * t : B.ease === 'out' ? 1 - (1 - t) * (1 - t) : B.ease === 'lin' ? t : smooth(t);
-  const o = {}; for (const f of KF) o[f] = lerp(A[f], B[f], t); return o;
+  const o = {};
+  if (B.ease === 'in') { // the strike is a whip, driven from the ground up: legs and hips go first and are already slowing as
+    // the arms come through, and the wrists release the blade last (proximal-to-distal sequencing)
+    const body = 1 - Math.pow(1 - t, 1.7), arms = Math.pow(t, 1.6), blade = t * t * t;
+    for (const f of KF) o[f] = lerp(A[f], B[f], f === 'a' ? blade : f === 'hx' || f === 'hy' ? arms : body);
+    return o;
+  }
+  t = B.ease === 'out' ? 1 - (1 - t) * (1 - t) : B.ease === 'lin' ? t : smooth(t);
+  for (const f of KF) o[f] = lerp(A[f], B[f], t); return o;
 }
 function beginSwing(e, def, dur) {
   const s = e.sab || NEUT, from = {}, body = s.w > 0.5;
