@@ -1060,7 +1060,11 @@ function updateTrail(e, dt) {
 function setState(e, s, t) { e.state = s; e.stateT = t; if (s === 'windup') e.windT = t; }
 function enemyBegin(e, windT) {
   const L = E_MOVES[e.type], cat = e.lastEnd, fit = cat === 'hi' || cat === 'lo' ? L.filter(d => d.from === cat) : [];
-  const def = fit.length ? fit[Math.floor(rand(fit.length))] : L[Math.floor(rand(L.length))];
+  // the distance picks the technique: from further out the long ones (tsuki, men), close in the short ones (kote, do, legs)
+  let C = fit.length ? fit : L; const gap = Math.abs(player.x - e.x) / (e.reach || 84);
+  const byGap = gap > 0.62 ? C.filter(d => (d.reach || 84) >= 86) : gap < 0.45 ? C.filter(d => (d.reach || 84) <= 86 && !d.fin) : [];
+  if (byGap.length) C = byGap;
+  const def = C[Math.floor(rand(C.length))];
   e.sw = Object.assign(beginSwing(e, def, 1), { struck: false }); e.lastEnd = def.end;
   setState(e, 'windup', windT);
 }
