@@ -255,7 +255,13 @@ const MOVES = {
       [0.42, { a: 1.1, h: [16, 22], lean: 0.4, cr: 17, hip: 3, rf: 3, rl: 6, ff: -4 }],
       [0.54, { a: 0.1, h: [30, 10], lean: 0.36, cr: 14, hip: 7, rf: 26, ff: -24 }, 'in'],
       [0.76, { a: -0.9, h: [20, -8], lean: 0.15, cr: 6 }, 'out'],
-      [1, { a: -1.1, h: [14, -5], lean: 0.1, cr: 4, hip: 2, rf: 19, ff: -17 }]])
+      [1, { a: -1.1, h: [14, -5], lean: 0.1, cr: 4, hip: 2, rf: 19, ff: -17 }]]),
+    // dian (jian: "point") — no swing at all: the arm reaches and the wrist drops, pecking the tip down onto the lead knee
+    mv({ lb: 'DIAN', dur: 0.22, h: 'low', from: 'mid', end: 'mid', dmg: 7, reach: 88, lunge: 360, kb: 60, act: [0.38, 0.64], cancel: 0.66 }, [
+      [0.26, { a: -0.9, h: [20, 8], lean: 0.06, cr: 6, hip: 0, rf: -16, ff: 14 }, 'out'],
+      [0.5, { a: 0.75, h: [31, 10], lean: 0.3, cr: 13, hip: 7, rf: -21, ff: 26 }, 'in'],
+      [0.62, { a: 0.6, h: [30, 10], lean: 0.3, cr: 13 }, 'out'],
+      [1, { a: -0.5, h: [16, 21], lean: 0.12, cr: 6, hip: 3, rf: -17, ff: 17 }]])
   ]
 };
 // jodan men — from the upper guard the cut is already loaded: one passing step and the blade falls
@@ -294,7 +300,7 @@ HIKI.low = HIKI.mid;
 // renzoku-waza (kote-men, kote-do, men-do, tsuki-men) and the strike each kamae is built to throw
 { const [MEN, , MEN_S] = MOVES.high, [DO, , TSUKI, KOTE] = MOVES.mid;
   KOTE.next = { high: MEN_S, mid: DO }; MEN_S.next = { high: MEN, mid: DO }; TSUKI.next = { high: MEN_S };
-  GUARDS.chudan.pref = { mid: KOTE }; GUARDS.seigan.pref = { mid: TSUKI, high: HARAI_MEN }; GUARDS.kasumi.pref = { mid: TSUKI };
+  GUARDS.chudan.pref = { mid: KOTE }; GUARDS.seigan.pref = { mid: TSUKI, high: HARAI_MEN }; GUARDS.kasumi.pref = { mid: TSUKI, low: MOVES.low[2] };
   GUARDS.jodan.pref = { high: JODAN_MEN }; GUARDS.gedan.pref = { mid: TSUKI, low: MOVES.low[1] }; GUARDS.waki.pref = { low: MOVES.low[0] }; }
 // ── Nunchaku ──────────────────────────────────────────────────────────────────────────────
 // One-handed, wrist-driven: whips that snap out and recoil, and whirls (figure-eight, overhead, low windmill) that strike
@@ -1488,7 +1494,7 @@ function drawHUD() {
     if (pr.last) text(pr.name + '  ' + Math.round(pr.last) + '   ·   combo ' + Math.round(pr.combo), viewW / 2, 40, 16, '#fff');
     const nmOf = h => { const d = peekMove(p, h); return d.nm || d.lb || 'CUT'; };
     text('from this stance:   R  ' + nmOf('high') + '      F  ' + nmOf('mid') + '      C  ' + nmOf('low'), 24, 170, 12, '#cfcfe6', 'left', 600);
-    text((p.nun ? 'whirls hit more than once' : 'F→R kote-men   ·   F→F kote-do') + '   ·   third hit: finisher   ·   back + attack up close: retreating strike   ·   Q just before impact: parry, then strike', viewW / 2, VIEW_H - 16, 12, '#cfcfe6', 'center', 600);
+    text((p.nun ? 'whirls hit more than once' : 'F→R kote-men   ·   F→F kote-do') + '   ·   third hit: finisher   ·   back + attack up close: retreating strike   ·   Q just before impact: parry, then strike   ·   dash through an attack, then strike', viewW / 2, VIEW_H - 16, 12, '#cfcfe6', 'center', 600);
   } else { text('WAVE ' + wave, viewW - 24, 36, 20, '#fff', 'right'); text(String(score).padStart(6, '0'), viewW - 24, 60, 18, '#ffd23a', 'right'); }
   if (hits > 1) { const pop = 1 + clamp(hitTimer - 2.3, 0, 0.2) * 2; text(hits + ' HITS', viewW - 24, 100, 22 * pop, p.blade, 'right'); bar(viewW - 124, 108, 100, 3, hitTimer / 2.5, p.blade); }
   const boss = enemies.find(e => e.boss || e.dummy);
