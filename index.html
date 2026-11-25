@@ -368,13 +368,16 @@ const FIN = {
     [0.8, { a: -0.25, h: [31, -3], lean: 0.34, cr: 10, hip: 6, rf: -22, ff: 27 }, 'in'],
     [0.92, { a: 0.95, h: [17, 20], lean: 0.42, cr: 19, hip: 6, rf: -24, ff: 28 }, 'out'],
     [1, { a: 0.9, h: [16, 20], lean: 0.36, cr: 15 }]]),
-  // pirouette cut: feet together to spin, blade held out flat, landing wide
-  mid: mv({ dur: 0.42, turn: 1, tw: [0.16, 0.86], around: true, h: 'mid', dmg: 22, reach: 96, lunge: 380, stepK: 0.16, carry: 800, kb: 430, fin: true, act: [0.2, 0.88] }, [
-    [0.16, { a: -0.5, h: [6, 2], lean: -0.05, cr: 9, hip: -2, rf: -10, ff: 10 }, 'out'],
-    [0.34, { a: 0.12, h: [31, 3], lean: 0.1, cr: 7, rf: -8, ff: 9 }],
-    [0.84, { a: 0.12, h: [31, 4], lean: 0.1, cr: 7 }],
+  // chan tou guo nao (dao: "wrap the head, envelop the crown") — as the body turns the sabre is carried round the head
+  // with its spine brushing the back, point hanging down, then released into a level cut (ping zhan) out of the turn
+  mid: mv({ lb: 'CHAN TOU', dur: 0.46, turn: 1, tw: [0.14, 0.8], around: true, h: 'mid', dmg: 22, reach: 96, lunge: 380, stepK: 0.16, carry: 800, kb: 430, fin: true, act: [0.5, 0.92] }, [
+    [0.14, { a: -1.3, h: [10, -14], lean: -0.04, cr: 8, hip: -2, rf: -10, ff: 10 }, 'out'],
+    [0.32, { a: 1.75, h: [-3, -27], lean: 0.02, cr: 7, rf: -8, ff: 9 }],
+    [0.58, { a: 1.9, h: [-5, -24], lean: 0.04, cr: 8 }],
+    [0.74, { a: 0.08, h: [31, 2], lean: 0.2, cr: 11, hip: 6, rf: -22, ff: 24 }, 'in'],
+    [0.88, { a: 0.3, h: [29, 5], lean: 0.24, cr: 12, hip: 7 }, 'out'],
     [1, { a: 0.35, h: [22, 9], lean: 0.22, cr: 11, hip: 4, rf: -22, ff: 23 }]]),
-  // spinning leg sweep: sunk on one bent leg with the other extended
+  // sao tang (sweep the hall): dropped into pu bu, one leg folded and the other stretched along the ground, the blade scything round at ankle height
   low: mv({ dur: 0.44, turn: 1, tw: [0.16, 0.86], around: true, h: 'low', dmg: 16, reach: 102, lunge: 260, stepK: 0.16, carry: 800, kb: 300, fin: true, trip: true, act: [0.2, 0.88] }, [
     [0.16, { a: 0.9, h: [10, 22], lean: 0.3, cr: 15, rf: -12, ff: 12 }, 'out'],
     [0.34, { a: 0.45, h: [28, 18], lean: 0.35, cr: 21, hip: -4, rf: -10, ff: 30 }],
