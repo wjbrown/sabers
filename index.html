@@ -1015,7 +1015,13 @@ function updateEnemy(e, dt) {
         if (e.boss && dist > 300 && e.leapCool <= 0 && e.onGround) {
           e.vy = -720; e.vx = clamp(dx / 0.85, -800, 800); e.onGround = false; e.leapCool = rand(4, 6); setState(e, 'leap', 0); sfx('dash'); break;
         }
-        if (dist > range) {
+        // maai: a trained fighter waits at issoku-itto-no-maai, one step outside striking distance, drifting in and out,
+        // and only crosses the line when ready to cut. Heavies have no such patience; grunts hold it loosely.
+        const keep = e.armor && !e.boss ? 0 : e.type === 'grunt' ? 1.12 : 1.38;
+        if (keep && (e.cool > 0.22 || busy >= 2) && !(e.dummy && drill !== 2)) {
+          const err = dist - (range * keep + Math.sin(e.animT * 1.4 + e.x * 0.01) * 9 * e.scale);
+          e.vx = approach(e.vx, err > 14 ? e.facing * e.speed : err < -10 ? -e.facing * e.speed * 0.62 : 0, 1400 * dt);
+        } else if (dist > range) {
           const hold = e.cool > 0.5 && dist < 150 && busy >= 2;
           e.vx = approach(e.vx, hold ? 0 : e.facing * e.speed, 1400 * dt);
         } else {
