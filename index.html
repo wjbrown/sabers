@@ -436,11 +436,16 @@ const AIRMOVES = {
   low: mv({ air: true, dur: 9, kdur: 0.12, plunge: true, dmg: 12, reach: 60, kb: 150, act: [0, 1] }, [[1, { a: 1.5, h: [7, 21], lean: 0.1, cr: 0 }, 'out']])
 };
 // chiburi + zanshin: flick the blade clean and settle back into guard, still watching
-const FLOURISH = mv({ dur: 0.95, noHit: true, act: [2, 3] }, [
-  [0.3, { a: -1.95, h: [7, -15], lean: 0, cr: 3, hip: -2, rf: -14, ff: 13 }],
-  [0.42, { a: 0.95, h: [23, 22], lean: 0.1, cr: 7, hip: 2, rf: -17, ff: 17 }, 'in'],
-  [0.72, { a: 0.9, h: [22, 22], lean: 0.1, cr: 7 }],
-  [1, { a: -0.62, h: [14, 22], lean: 0.1, cr: 4, hip: 0, rf: -16, ff: 15 }]]);
+const FLOURISH = mv({ dur: 1.05, noHit: true, act: [2, 3] }, [ // o-chiburi: hilt to the temple, the tip swung down the diagonal, feet drawn together
+  [0.3, { a: -2.05, h: [5, -21], lean: 0, cr: 3, hip: -2, rf: -14, ff: 13 }],
+  [0.42, { a: 0.95, h: [23, 22], lean: 0.08, cr: 5, hip: 2, rf: -15, ff: 15 }, 'in'],
+  [0.74, { a: 0.9, h: [22, 22], lean: 0.04, cr: 2, hip: 0, rf: -7, ff: 8 }],
+  [1, { a: -0.52, h: [15, 22], lean: 0.1, cr: 4, hip: 0, rf: -16, ff: 15 }]]);
+const FLOURISH2 = mv({ dur: 0.85, noHit: true, act: [2, 3] }, [ // yoko-chiburi: a short, sharp snap out to the side with the blade level
+  [0.32, { a: -0.3, h: [9, 15], lean: 0.04, cr: 4, hip: -1, rf: -15, ff: 14 }],
+  [0.42, { a: 0.03, h: [25, 18], lean: 0.1, cr: 6, hip: 2, rf: -16, ff: 16 }, 'in'],
+  [0.74, { a: 0.03, h: [25, 18], lean: 0.1, cr: 6 }],
+  [1, { a: -0.52, h: [15, 22], lean: 0.1, cr: 4, hip: 0, rf: -16, ff: 15 }]]);
 // suriage — the perfect parry is not a stop: the ridge of the blade meets the incoming cut and rides up it in a small arc,
 // throwing it off the centre line and leaving the sword raised, so the answering cut follows with no break in rhythm
 const SURIAGE = mv({ dur: 0.24, noHit: true, keep: true, act: [2, 3] }, [
@@ -954,7 +959,7 @@ function updatePlayer(dt) {
     if (!p.sw && p.atkCool <= 0) { p.bufT = 0; startAttack(want, mx); }
     else if (p.sw && p.sw.t > p.sw.dur * 0.3) { p.bufT = 0; p.queued = want; }
   }
-  if (p.flourish && !p.sw && p.onGround && !stunned && p.dash <= 0 && !mx && !p.blocking) { p.flourish = false; p.sw = beginSwing(p, FLOURISH); p.guard = p.nun ? 'ready' : 'chudan'; p.guardT = 3; }
+  if (p.flourish && !p.sw && p.onGround && !stunned && p.dash <= 0 && !mx && !p.blocking) { p.flourish = false; p.sw = beginSwing(p, Math.random() < 0.5 ? FLOURISH : FLOURISH2); p.guard = p.nun ? 'ready' : 'chudan'; p.guardT = 3; }
   if (p.nun && !p.sw && p.onGround && !stunned && p.dash <= 0 && !mx && !p.blocking && p.atkCool <= 0 && (p.idleT -= dt) <= 0) { // the hands stay busy
     const d = NIDLE[Math.floor(rand(NIDLE.length))]; p.sw = beginSwing(p, d); p.idleT = rand(1.2, 3.2); if (!p.hold) { p.guard = d.g; p.guardT = d.dur + rand(1.5, 3); }
   }
