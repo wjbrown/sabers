@@ -921,10 +921,15 @@ function updatePlayer(dt) {
         const okX = d.around ? Math.abs(dx) < reach + e.w : dx > -22 && dx < reach + e.w;
         if (okX && e.y > p.y - band[0] && e.y - e.h < p.y + band[1]) {
           s.hitSet.add(e);
-          const deb = e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;                // debana: caught as their attack starts
+          const deb = e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;
+          const ko = !p.nun && d.h === 'high' && d.nm && e.melee && e.state === 'swing' && e.sw && !e.sw.struck;                // debana: caught as their attack starts
           if (damageEnemy(e, d.dmg * p.dmgMul * (s.bonus || 1) * (deb ? 1.3 : 1), Math.sign(e.x - p.x) || p.facing, d.kb, d.fin, d.h === 'low', d)) {
             if (d.nm && !s.called) { s.called = true; floatText(p.x + p.facing * 26, p.y - 122, d.nm + '!', '#fff', 15); } // kiai: call the target
             if (deb) floatText(ex, ey - 26, 'DEBANA', '#ffd23a', 13);
+            if (ko && enemies.includes(e)) { // kiri-otoshi: the straight cut down the centre rides over their cut and throws it off line
+              e.sw = null; setState(e, 'recover', 0.55); e.cool = Math.max(e.cool, 0.5); e.comboLeft = 0;
+              sparks(ex - p.facing * 20, ey + 26, 10, '#fff', 380); sfx('clash'); floatText(ex, ey - 26, 'KIRI-OTOSHI', '#ffd23a', 13); score += 30;
+            }
           }
         }
       }
