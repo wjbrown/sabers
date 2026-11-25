@@ -448,7 +448,7 @@ function newPlayer() {
     type: 'player', x: WORLD / 2, y: GROUND, vx: 0, vy: 0, facing: 1, onGround: true, jumps: 0,
     hp: 100, maxHp: 100, en: 100, maxEn: 100, regen: 22, scale: 1, color: turtleMode ? '#86d44e' : '#f2f2f2', blade: turtleMode === 1 ? STEEL : turtleMode === 2 ? '#e0a860' : BLADES[bladeIdx], turtle: turtleMode > 0, steel: turtleMode === 1, nun: turtleMode === 2, band: turtleMode === 2 ? '#fff04a' : '#f4f1e8', idleT: 2,
     bladeLen: 58, head: 'round', w: 14, h: 90, sw: null, comboIdx: 0, comboTimer: 0, queued: null, atkCool: 0, rot: { high: 0, mid: 0, low: 0 }, airRise: false,
-    blocking: false, blockAge: 0, blockH: 'mid', guard: 'chudan', guardT: 4, hold: null, lastDef: null, riposte: 0, near: false, flourish: false, buf: null, bufT: 0, dash: 0, dashCool: 0, dashDir: 1, invuln: 0, stun: 0, pushCool: 0,
+    blocking: false, blockAge: 0, blockH: 'mid', guard: 'chudan', guardT: 4, nuki: 0, hold: null, lastDef: null, riposte: 0, near: false, flourish: false, buf: null, bufT: 0, dash: 0, dashCool: 0, dashDir: 1, invuln: 0, stun: 0, pushCool: 0,
     hitFlash: 0, run: 0, animT: 0, trail: [], ghostT: 0,
     dmgMul: 1, reachMul: 1, speedMul: 1, siphon: 0, pushDmg: 0, pushPow: 1, dashCost: 15, reflectMul: 1
   };
@@ -834,7 +834,7 @@ function updatePlayer(dt) {
   if (p.comboTimer > 0) { p.comboTimer -= dt; if (p.comboTimer <= 0) p.comboIdx = 0; }
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
   const stunned = p.stun > 0; if (stunned) p.stun -= dt;
-  p.riposte -= dt; p.near = !!nearestEnemy(380);
+  p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380);
   if (p.lockT > 0) { // pressing in the bind; it ends with a shove apart, or sooner if either of us acts
     const le = p.lockE, alive = le && enemies.includes(le) && le.lockT > 0;
     p.lockT -= dt; if (p.sw || p.dash > 0 || !alive || Math.abs(le.x - p.x) > 96 * le.scale) { p.lockT = 0; if (alive && (p.sw || p.dash > 0)) le.lockT = Math.min(le.lockT, 0.12); }
@@ -860,6 +860,8 @@ function updatePlayer(dt) {
   if (hit(...K.dash) && !stunned && p.dashCool <= 0 && p.en >= p.dashCost && p.dash <= 0) {
     p.dash = 0.17; p.dashCool = 0.45; p.dashDir = mx || p.facing; p.en -= p.dashCost; p.sw = null; p.blocking = false;
     p.invuln = Math.max(p.invuln, 0.22); sfx('dash'); dust(p.x, p.y, 5);
+    // nuki-waza: slipping an attack that is already on its way leaves the attacker cutting air, wide open
+    if (enemies.some(e => e.melee && (e.state === 'swing' || (e.state === 'windup' && e.stateT < 0.22)) && Math.abs(e.x - p.x) < 170)) p.nuki = 0.75;
   }
   // push
   if (hit(...K.push) && !stunned && p.pushCool <= 0 && p.en >= 35 && p.dash <= 0) doPush();
@@ -965,6 +967,7 @@ function startAttack(h, mx) {
     if (def.float) p.vy = Math.min(p.vy * 0.3, 40);
     if (def.plunge) { p.vy = 950; p.vx *= 0.3; }
   }
+  else if (p.nuki > 0 && !p.nun && h === 'mid' && p.comboIdx < 2) def = MOVES.mid[0];           // men-nuki-do: the flank is open
   else if (hiki) def = HIKI[h];                                                             // backing off at close range
   else if (p.comboIdx >= 2) def = (p.nun ? NFIN : FIN)[h];
   else if (p.comboIdx === 0 && mx && Math.abs(p.vx) > 230) def = RUN[h];
@@ -977,6 +980,7 @@ function startAttack(h, mx) {
   p.sw = beginSwing(p, def); p.lastDef = def;
   if (p.onGround && !def.fin && !def.auth) {
     if (p.riposte > 0) { quicken(p.sw, 0.15); p.sw.bonus = 1.5; p.riposte = 0; floatText(p.x, p.y - 138, 'KAESHI', p.blade, 16); } // parry and answer in one motion
+    else if (p.nuki > 0) { quicken(p.sw, 0.25); p.sw.bonus = 1.35; p.nuki = 0; floatText(p.x, p.y - 138, 'NUKI', p.blade, 16); }
     else if (ready) quicken(p.sw, 0.45);                                                      // already chambered
   }
   if (def.end) { p.guard = (p.nun ? NEND : END_GUARD)[def.end]; p.guardT = (p.hold ? 0.3 : 1.6) + def.dur; }
