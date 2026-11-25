@@ -61,45 +61,142 @@ const K = {
 };
 
 // ───────────────────────── audio ─────────────────────────
-let AC = null, master = null, noiseBuf = null, muted = false;
+// Every sound is synthesised with WebAudio (oscillators and filtered noise); there are no sample files.
+let AC = null, master = null, noiseBuf = null, crackBuf = null, muted = false, hum = null, eHum = null, sizz = null;
+const sfxAt = {}, snd = { tx: 0, ty: 0, sp: 0, esp: 0 };
 function audioInit() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    master = AC.createGain(); master.gain.value = 0.4; master.connect(AC.destination);
+    const comp = AC.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6; comp.connect(AC.destination);
+    master = AC.createGain(); master.gain.value = 0.5; master.connect(comp);
     noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  } catch (e) { AC = null; }
+    crackBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);                    // sparse decaying spikes: electrical crackle
+    const c = crackBuf.getChannelData(0);
+    for (let i = 0, v = 0; i < c.length; i++) { if (Math.random() < 0.012) v = Math.random() * 2 - 1; c[i] = v; v *= 0.86; }
+    hum = makeHum(92); eHum = makeHum(69); sizz = makeSizzle();
+  } catch (e) { AC = null; hum = null; }
 }
-function tone(type, f0, f1, dur, vol) {
-  const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', () => { if (AC) { if (document.hidden) AC.suspend(); else AC.resume(); } });
+// The blade's idle hum: detuned saws and a sub-octave buzz through a low-pass, with a slow tremor. It runs all the time;
+// audioFrame() opens the filter and bends the pitch up with the speed of the blade, which is what makes a swing go "vwoom".
+function makeHum(f) {
+  const out = AC.createGain(), lp = AC.createBiquadFilter(), trem = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain(), oscs = [];
+  out.gain.value = 0; lp.type = 'lowpass'; lp.frequency.value = 360; lp.Q.value = 1.4;
+  for (const [type, mul, vol] of [['sawtooth', 1, 0.5], ['sawtooth', 1.008, 0.5], ['square', 0.5, 0.32], ['sawtooth', 1.498, 0.16]]) {
+    const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.value = f * mul; g.gain.value = vol; o.connect(g); g.connect(lp); o.start(); oscs.push(o);
+  }
+  lfo.frequency.value = 6.3; lg.gain.value = 0.14; lfo.connect(lg); lg.connect(trem.gain); lfo.start();
+  lp.connect(trem); trem.connect(out); out.connect(master);
+  return { out, lp, oscs };
+}
+function humSet(h, level, speed) {
+  const t = AC.currentTime;
+  h.out.gain.setTargetAtTime(level * (0.11 + speed * 0.45), t, 0.035);
+  h.lp.frequency.setTargetAtTime(360 + speed * 1700, t, 0.04);
+  for (const o of h.oscs) o.detune.setTargetAtTime(speed * 520, t, 0.05);
+}
+// Two blades held against each other: chopped crackle over a harsh buzz, faded in while a bind or clash lasts.
+function makeSizzle() {
+  const out = AC.createGain(), s = AC.createBufferSource(), bp = AC.createBiquadFilter(), chop = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain(), buzz = AC.createOscillator(), bg = AC.createGain();
+  out.gain.value = 0; s.buffer = crackBuf; s.loop = true; bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 0.7;
+  chop.gain.value = 0.6; lfo.type = 'square'; lfo.frequency.value = 57; lg.gain.value = 0.4; lfo.connect(lg); lg.connect(chop.gain);
+  buzz.type = 'sawtooth'; buzz.frequency.value = 114; bg.gain.value = 0.12; buzz.connect(bg); bg.connect(chop);
+  s.connect(bp); bp.connect(chop); chop.connect(out); out.connect(master); s.start(); lfo.start(); buzz.start();
+  return out;
+}
+function audioFrame(rdt) {
+  if (!AC || !hum) return;
+  const p = player, live = state === 'play' && !paused && !muted && rdt > 0;
+  let lv = 0, elv = 0, sp = 0, esp = 0, sz = 0;
+  if (live) {
+    if (p.hp > 0 && p.blade && !p.steel && !p.nun) {
+      const P = pose(p), rx = (P.tip.x - p.x) * p.facing, ry = P.tip.y - p.y;
+      sp = clamp(Math.hypot(rx - snd.tx, ry - snd.ty) / rdt / 2600, 0, 1); snd.tx = rx; snd.ty = ry; lv = 1;
+    }
+    for (const e of enemies) if (e.melee && e.blade && !e.gun) {
+      const P = pose(e), rx = (P.tip.x - e.x) * e.facing, ry = P.tip.y - e.y, near = clamp(1.2 - Math.abs(e.x - p.x) / 700, 0.15, 1);
+      if (e.tpx === undefined) sfx('eignite'); else esp = Math.max(esp, clamp(Math.hypot(rx - e.tpx, ry - e.tpy) / rdt / 2600, 0, 1) * near);
+      e.tpx = rx; e.tpy = ry; elv = Math.max(elv, near);
+    }
+    if (p.hp > 0 && !p.nun && (p.lockT > 0 || p.clashT > 0)) sz = p.steel ? 0.35 : 1;
+  }
+  snd.sp += (sp - snd.sp) * Math.min(1, rdt * (sp > snd.sp ? 30 : 8)); snd.esp += (esp - snd.esp) * Math.min(1, rdt * (esp > snd.esp ? 30 : 8));
+  humSet(hum, lv, snd.sp); humSet(eHum, elv * 0.5, snd.esp);
+  sizz.gain.setTargetAtTime(sz * 0.9, AC.currentTime, 0.025);
+}
+function tone(type, f0, f1, dur, vol, at = 0) {
+  const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime + at;
   o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
 }
-function noise(ftype, f0, f1, dur, vol, q = 1) {
-  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain(), t = AC.currentTime;
-  s.buffer = noiseBuf; s.loop = true; f.type = ftype; f.Q.value = q;
+function noise(ftype, f0, f1, dur, vol, q = 1, at = 0, buf = noiseBuf) {
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain(), t = AC.currentTime + at;
+  s.buffer = buf; s.loop = true; f.type = ftype; f.Q.value = q;
   f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random()); s.stop(t + dur + 0.02);
 }
+// blade on blade: a hiss of white noise, crackle underneath, and the hum driven down hard
+function zap(v, k) {
+  noise('highpass', 2400 * v, 900, 0.2 * k, 0.5); noise('bandpass', 1000 * v, 320, 0.3 * k, 0.5, 0.8, 0, crackBuf);
+  tone('sawtooth', 190 * v, 70, 0.28 * k, 0.28); tone('square', 97 * v, 60, 0.3 * k, 0.2); tone('sawtooth', 2600 * v, 500, 0.07, 0.07);
+}
+// steel on steel: a click and a handful of inharmonic partials ringing out
+function ring(v, k) {
+  noise('highpass', 5200, 3000, 0.045, 0.4);
+  for (const [f, dur, vol] of [[2140, 0.5, 0.11], [3190, 0.38, 0.09], [4470, 0.28, 0.07], [5930, 0.2, 0.05], [1210, 0.22, 0.06]]) tone('sine', f * v, f * v * 0.985, dur * k, vol);
+}
+function thock(v) { tone('triangle', 430 * v, 190, 0.07, 0.5); noise('bandpass', 1500 * v, 700, 0.06, 0.4, 2); }
 function sfx(n) {
   if (!AC || muted) return;
+  const now = AC.currentTime; if (sfxAt[n] > now - 0.035) return; sfxAt[n] = now;
+  const w = typeof player === 'object' && player ? (player.nun ? 2 : player.steel ? 1 : 0) : 0, v = rand(0.92, 1.1); // 0 saber, 1 steel, 2 wood
   switch (n) {
-    case 'swing': noise('bandpass', 350, 1700, 0.2, 0.35, 2); tone('sawtooth', 110, 190, 0.18, 0.05); break;
-    case 'eswing': noise('bandpass', 250, 1100, 0.22, 0.25, 2); break;
-    case 'clash': noise('highpass', 3500, 2000, 0.14, 0.4); tone('square', 1900, 700, 0.12, 0.08); break;
-    case 'hit': noise('lowpass', 1400, 300, 0.14, 0.5); tone('sine', 170, 55, 0.16, 0.4); break;
-    case 'hurt': noise('lowpass', 900, 150, 0.25, 0.6); tone('sawtooth', 220, 60, 0.25, 0.2); break;
-    case 'bolt': tone('sawtooth', 1100, 220, 0.16, 0.12); break;
-    case 'deflect': tone('square', 1500, 2400, 0.08, 0.1); noise('highpass', 4000, 2500, 0.08, 0.3); break;
-    case 'parry': tone('triangle', 900, 2600, 0.25, 0.25); noise('highpass', 5000, 2000, 0.2, 0.4); break;
-    case 'push': tone('sine', 110, 35, 0.45, 0.6); noise('lowpass', 700, 100, 0.4, 0.5); break;
+    case 'swing':
+      if (w === 1) { noise('bandpass', 1400 * v, 5200 * v, 0.16, 1.1, 4); noise('highpass', 6000, 3000, 0.1, 0.2); }
+      else if (w === 2) { noise('bandpass', 260 * v, 820 * v, 0.14, 1.2, 3); tone('sine', 140, 210, 0.12, 0.15); }
+      else noise('bandpass', 500 * v, 1500 * v, 0.22, 0.5, 1.5);                     // the hum's pitch bend carries the rest
+      break;
+    case 'eswing': noise('bandpass', 300 * v, 1000 * v, 0.22, 0.4, 1.5); break;
+    case 'clash': if (w === 2) thock(v); else if (w === 1) ring(v, 0.8); else zap(v, 1); break;
+    case 'bigclash':
+      if (w === 2) { thock(v); thock(v * 0.8); } else if (w === 1) { ring(v, 1.5); ring(v * 1.19, 1.1); } else { zap(v, 1.6); noise('highpass', 5000, 2000, 0.25, 0.3); }
+      tone('sine', 150, 40, 0.35, 0.5); break;
+    case 'graze':
+      if (w === 1) { tone('sine', 3300 * v, 3200 * v, 0.16, 0.07); noise('highpass', 6000, 4000, 0.03, 0.2); }
+      else { noise('bandpass', 3000 * v, 1500, 0.1, 0.75, 1, 0, crackBuf); noise('highpass', 3000, 1500, 0.07, 0.2); tone('sawtooth', 240 * v, 150, 0.09, 0.14); }
+      break;
+    case 'parry':
+      if (w === 2) thock(v); else if (w === 1) ring(v * 1.12, 1.3); else zap(v * 1.15, 1.1);
+      tone('triangle', 900, 2600, 0.25, 0.2); noise('highpass', 5000, 2000, 0.2, 0.3); break;
+    case 'hit':
+      if (w === 2) thock(v * 0.8); else if (w === 1) noise('highpass', 3500 * v, 1200, 0.12, 0.4); else noise('bandpass', 3200 * v, 900, 0.2, 0.4, 0.8, 0, crackBuf);
+      noise('lowpass', 1400, 300, 0.14, 0.45); tone('sine', 170, 55, 0.16, 0.4); break;
+    case 'hurt': noise('lowpass', 900, 150, 0.25, 0.6); tone('sawtooth', 220, 60, 0.25, 0.2); noise('bandpass', 2800, 800, 0.22, 0.35, 0.8, 0, crackBuf); break;
+    case 'bolt': tone('square', 1500 * v, 240, 0.17, 0.14); tone('sawtooth', 2300 * v, 320, 0.13, 0.11); noise('bandpass', 2600, 700, 0.08, 0.4, 2); break;
+    case 'deflect': tone('square', 700, 2600 * v, 0.1, 0.16); tone('sine', 2900 * v, 1500, 0.22, 0.2, 0.03); noise('bandpass', 3000, 1200, 0.1, 0.8, 1, 0, crackBuf); break;
+    case 'push': tone('sine', 110, 35, 0.45, 0.6); noise('lowpass', 700, 100, 0.4, 0.5); noise('bandpass', 200, 1400, 0.35, 0.2, 1); break;
     case 'stomp': tone('sine', 95, 38, 0.1, 0.5); noise('lowpass', 420, 90, 0.07, 0.35); break;
-    case 'dash': noise('bandpass', 1800, 500, 0.15, 0.25, 1.5); break;
-    case 'die': noise('lowpass', 2500, 120, 0.4, 0.5); tone('sawtooth', 300, 40, 0.4, 0.15); break;
+    case 'jump': noise('bandpass', 450, 1300, 0.11, 0.5, 1.2); break;
+    case 'land': tone('sine', 105, 42, 0.09, 0.4); noise('lowpass', 500, 100, 0.08, 0.3); break;
+    case 'dash': noise('bandpass', 1800, 500, 0.15, 0.7, 1.5); break;
+    case 'die':
+      noise('lowpass', 2500, 120, 0.4, 0.45); tone('sawtooth', 300, 40, 0.4, 0.12);
+      for (let i = 0; i < 4; i++) tone('sine', rand(1800, 4200), rand(900, 1500), 0.18, 0.05, i * 0.03);
+      break;
+    case 'stun': tone('sawtooth', 520, 90, 0.35, 0.18); noise('bandpass', 2000, 500, 0.3, 0.3, 0.8, 0, crackBuf); break;
+    case 'ignite':
+      if (w === 1) { noise('bandpass', 2500, 7000, 0.35, 0.22, 6); ring(1.3, 0.6); }
+      else if (w === 2) { noise('bandpass', 260, 820, 0.14, 0.35, 3); noise('bandpass', 300, 900, 0.14, 0.35, 3, 0.16); }
+      else { tone('sawtooth', 40, 96, 0.42, 0.3); tone('square', 30, 48, 0.42, 0.2); noise('bandpass', 300, 3200, 0.36, 0.3, 1.2); noise('highpass', 3000, 6000, 0.14, 0.25, 1, 0, crackBuf); }
+      break;
+    case 'eignite': tone('sawtooth', 34, 72, 0.36, 0.14); noise('bandpass', 260, 2400, 0.3, 0.14, 1.2); break;
+    case 'retract': if (w === 0) { tone('sawtooth', 130, 36, 0.42, 0.3); noise('bandpass', 2600, 250, 0.4, 0.25, 1.2); } break;
+    case 'over': tone('triangle', 196, 98, 0.9, 0.25); tone('triangle', 147, 73, 1.1, 0.2, 0.15); break;
     case 'ui': tone('sine', 660, 990, 0.1, 0.2); break;
     case 'wave': tone('triangle', 220, 440, 0.4, 0.25); tone('triangle', 330, 660, 0.5, 0.15); break;
     case 'heal': tone('sine', 520, 1040, 0.2, 0.2); break;
@@ -500,7 +597,7 @@ function startGame() {
   player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = [];
   wave = 0; score = 0; hits = 0; hitTimer = 0; deadT = 0; hitstop = 0; slowT = 0; shake = 0;
   camX = clamp(player.x - viewW / 2, 0, Math.max(0, WORLD - viewW));
-  state = 'play'; paused = false; practice = false; demo = false; nextWave();
+  state = 'play'; paused = false; practice = false; demo = false; flares.length = 0; sfx('ignite'); nextWave();
 }
 // Practice: one tireless partner, no waves, nothing to lose. T changes what the partner does.
 function spawnPartner() {
@@ -842,6 +939,11 @@ function sparks(x, y, n, color, spd = 380, dirX = 0) {
     parts.push({ x, y, vx: Math.cos(a) * v + dirX * spd * 0.5, vy: Math.sin(a) * v - 80, life: rand(0.15, 0.45), max: 0.45, color, g: 900, size: rand(1.5, 3) });
   }
 }
+// A burst of light where two blades touch.
+const flares = [];
+function flare(x, y, r, col = '#fff', life = 0.16) { if (flares.length > 30) flares.shift(); flares.push({ x, y, r, col, life, max: life, a: rand(3.14) }); }
+function crossPt(a, b) { const A = pose(a), B = pose(b); return segHit(A.hand, A.tip, B.hand, B.tip) || { x: (A.hand.x + A.tip.x + B.hand.x + B.tip.x) / 4, y: (A.hand.y + A.tip.y + B.hand.y + B.tip.y) / 4 }; }
+function contact(a, b, r = 46) { const at = crossPt(a, b); flare(at.x, at.y, r); a.glowN = b.glowN = frameN + 12; return at; }
 function dust(x, y, n) {
   for (let i = 0; i < n; i++) parts.push({ x: x + rand(-8, 8), y, vx: rand(-90, 90), vy: rand(-70, -10), life: rand(0.25, 0.5), max: 0.5, color: '#6d6a85', g: 60, size: rand(2, 4), dust: true });
 }
@@ -869,11 +971,11 @@ function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
   e.lastHitDir = dir;
   const facingAttacker = e.facing === -dir;
   if (e.melee && e.block && !unblockable && !(e.swept > 0) && facingAttacker && (e.state === 'chase' || e.state === 'recover') && Math.random() < e.block) {
-    const P = pose(e);
     e.blockT = 0.35; e.blockH = d && d.h || 'mid'; e.vx += dir * (fin ? 320 : 130); e.recoil = 1;
-    sparks(P.hand.x + dir * -10, P.hand.y - 20, 12, '#fff', 420); sparks(P.hand.x, P.hand.y - 20, 6, e.blade, 300);
+    const at = contact(player, e, fin ? 64 : 46);
+    sparks(at.x, at.y, 12, '#fff', 420); sparks(at.x, at.y, 6, e.blade, 300);
     sfx('clash'); hitstop = Math.max(hitstop, 0.05); shake = Math.max(shake, 4);
-    if (fin) { e.state = 'stun'; e.stateT = 0.5; e.blockT = 0; floatText(e.x, e.y - e.h - 10, 'GUARD BROKEN', '#ffd23a', 14); }
+    if (fin) { e.state = 'stun'; e.stateT = 0.5; e.blockT = 0; sfx('stun'); floatText(e.x, e.y - e.h - 10, 'GUARD BROKEN', '#ffd23a', 14); }
     else { // tsuba-zeriai: a blocked cut at close quarters ends guard against guard, both pressing, until someone breaks away
       const q = player;
       if (d && !d.air && !q.nun && q.onGround && e.onGround && q.sw && Math.abs(e.x - q.x) < 82 * e.scale) {
@@ -916,7 +1018,7 @@ function hurtPlayer(dmg, dir) {
   p.hp -= dmg; p.invuln = 0.55; p.hitFlash = 0.15; p.hitR = 1; p.hitDir = dir; p.hitH = p.hitHNext || 'mid'; p.hitHNext = null; p.vx = dir * 320; p.vy = -180; p.onGround = false;
   p.sw = null; p.blocking = false; p.stun = 0.18; hits = 0;
   sparks(p.x, p.y - 50, 12, '#ff4d4d', 400, dir); sfx('hurt'); shake = 12; hitstop = 0.07; flash = 0.12;
-  if (p.hp <= 0) { p.hp = 0; p.lastHitDir = dir; shatter(p); slowT = 1.4; deadT = 0; sfx('die'); }
+  if (p.hp <= 0) { p.hp = 0; p.lastHitDir = dir; shatter(p); slowT = 1.4; deadT = 0; sfx('die'); sfx('retract'); }
 }
 function playerGuards(fromX) {
   const p = player;
@@ -935,17 +1037,19 @@ function enemyStrike(e, aoe) {
     if (p.blockAge < 0.22) {
       e.state = 'stun'; e.stateT = e.boss ? 0.9 : 1.4; e.sw = null; e.comboLeft = 0; e.vx = -dir * 160;
       p.en = Math.min(p.maxEn, p.en + 20);
-      sparks(P.tip.x, P.tip.y + 20, 26, '#fff', 560); sparks(P.tip.x, P.tip.y + 20, 10, p.blade, 420);
+      const at = e.blade && !e.gun && !aoe ? contact(p, e, 84) : { x: P.tip.x, y: P.tip.y + 20 };
+      sparks(at.x, at.y, 26, '#fff', 560); sparks(at.x, at.y, 10, p.blade, 420);
       sfx('parry'); slowT = Math.max(slowT, 0.3); shake = 8; flash = 0.12;
       floatText(p.x, p.y - 120, 'PARRY!', '#fff', 24); score += 50; p.riposte = 0.8;
       if (!p.nun && p.onGround) { p.sw = beginSwing(p, SURIAGE); p.blocking = false; p.invuln = Math.max(p.invuln, 0.3); p.guard = 'jodan'; p.guardT = 1; }
     } else {
       p.en -= e.dmg * 1.3; p.vx = dir * (160 + e.dmg * 8);
-      sparks(P.hand.x + p.facing * 12, P.hand.y - 22, 12, '#fff', 400); sparks(P.hand.x, P.hand.y - 22, 6, e.blade, 300);
+      const at = e.blade && !e.gun && !aoe ? contact(p, e, 46) : { x: P.hand.x + p.facing * 12, y: P.hand.y - 22 };
+      sparks(at.x, at.y, 12, '#fff', 400); sparks(at.x, at.y, 6, e.blade || '#fff', 300);
       sfx('clash'); shake = Math.max(shake, 5); hitstop = 0.04;
       if (p.sab) { p.sab.a += p.blockH === 'high' ? -0.4 : 0.32; p.sab.hx -= 8; p.sab.hy += 3; } // uke-nagashi: the blow runs off the angled blade and the guard gives, then springs back
       p.recoil = 1;
-      if (p.en <= 0) { p.en = 0; p.stun = 0.75; p.blocking = false; floatText(p.x, p.y - 120, 'GUARD BREAK', '#ff4d4d', 18); }
+      if (p.en <= 0) { p.en = 0; p.stun = 0.75; p.blocking = false; sfx('stun'); floatText(p.x, p.y - 120, 'GUARD BREAK', '#ff4d4d', 18); }
     }
     return;
   }
@@ -964,7 +1068,7 @@ function reflectBolt(b, perfect) {
   else a = Math.atan2(-b.vy, -b.vx) + rand(-0.5, 0.5);
   b.vx = Math.cos(a) * spd; b.vy = Math.sin(a) * spd; b.owner = 'p'; b.life = 2.5;
   b.dmg = 30 * p.reflectMul * (perfect ? 1.5 : 1);
-  sparks(b.x, b.y, 8, '#fff', 320); sfx('deflect'); score += 15;
+  sparks(b.x, b.y, 8, '#fff', 320); flare(b.x, b.y, perfect ? 44 : 30, '#fff', 0.1); p.glowN = frameN + 8; sfx('deflect'); score += 15;
 }
 function doPush() {
   const p = player;
@@ -1004,7 +1108,11 @@ function updatePlayer(dt) {
   if (p.lockT > 0) { // pressing in the bind; it ends with a shove apart, or sooner if either of us acts
     const le = p.lockE, alive = le && enemies.includes(le) && le.lockT > -0.5; // (their timer runs a frame ahead of ours)
     p.lockT -= dt; if (p.sw || p.dash > 0 || !alive || Math.abs(le.x - p.x) > 96 * le.scale) { p.lockT = 0; if (alive && (p.sw || p.dash > 0)) le.lockT = Math.min(le.lockT, 0.12); }
-    if (alive && Math.random() < dt * 30) { const P = pose(p); sparks(P.hand.x + p.facing * 18, P.hand.y - 26, 1, '#fff', 160); }
+    if (alive) { // the blades grind on each other: the crossing point spits light for as long as the bind lasts
+      const at = crossPt(p, le); p.glowN = le.glowN = frameN + 7;
+      if (Math.random() < dt * 34) sparks(at.x, at.y, 1, Math.random() < 0.5 ? '#fff' : le.blade, 220);
+      if (Math.random() < dt * 24) flare(at.x + rand(-3, 3), at.y + rand(-3, 3), rand(16, 32), Math.random() < 0.6 ? '#fff' : le.blade, 0.07);
+    }
     if (p.lockT <= 0 && alive) {
       le.lockT = 0;
       if (!p.sw && p.dash <= 0) {
@@ -1064,7 +1172,7 @@ function updatePlayer(dt) {
       s.beat = true; const n = nearestEnemy(135);
       if (n && n.melee && !n.gun && (n.x - p.x) * p.facing > 0 && (n.state === 'chase' || n.state === 'recover')) {
         n.swept = 0.6; n.blockT = 0; if (n.sab) { n.sab.a += 1.0; n.sab.hy += 6; }
-        const P = pose(n); sparks((P.hand.x + P.tip.x) / 2, (P.hand.y + P.tip.y) / 2, 8, '#fff', 300); sfx('clash'); floatText(n.x, n.y - n.h - 12, 'HARAI', '#fff', 13);
+        const P = pose(n), hx = (P.hand.x + P.tip.x) / 2, hy = (P.hand.y + P.tip.y) / 2; sparks(hx, hy, 8, '#fff', 300); flare(hx, hy, 40); p.glowN = n.glowN = frameN + 10; sfx('clash'); floatText(n.x, n.y - n.h - 12, 'HARAI', '#fff', 13);
       }
     }
     if (d.multi && (s.mi || 0) < d.multi.length && k >= d.multi[s.mi || 0]) { s.mi = (s.mi || 0) + 1; s.hitSet.clear(); } // a whirl comes round again
@@ -1085,7 +1193,7 @@ function updatePlayer(dt) {
             if (deb) floatText(ex, ey - 26, 'DEBANA', '#ffd23a', 13);
             if (ko && enemies.includes(e)) { // kiri-otoshi: the straight cut down the centre rides over their cut and throws it off line
               e.sw = null; setState(e, 'recover', 0.55); e.cool = Math.max(e.cool, 0.5); e.comboLeft = 0;
-              sparks(ex - p.facing * 20, ey + 26, 10, '#fff', 380); sfx('clash'); floatText(ex, ey - 26, 'KIRI-OTOSHI', '#ffd23a', 13); score += 30;
+              sparks(ex - p.facing * 20, ey + 26, 10, '#fff', 380); flare(ex - p.facing * 20, ey + 26, 52); p.glowN = e.glowN = frameN + 12; sfx('clash'); floatText(ex, ey - 26, 'KIRI-OTOSHI', '#ffd23a', 13); score += 30;
             }
           }
         }
@@ -1118,13 +1226,13 @@ function updatePlayer(dt) {
     else if (mx) { p.vx = approach(p.vx, mx * maxSp, (p.onGround ? 3200 : 2000) * dt); if (!p.sw) p.facing = mx; }
     else p.vx = approach(p.vx, 0, (p.onGround ? 2600 : 600) * dt);
     if (hit(...K.jump) && (p.onGround || p.jumps < 2)) {
-      p.vy = p.onGround ? -640 : -560; p.jumps = p.onGround ? 1 : 2; p.onGround = false; dust(p.x, p.y, 4);
+      p.vy = p.onGround ? -640 : -560; p.jumps = p.onGround ? 1 : 2; p.onGround = false; dust(p.x, p.y, 4); sfx('jump');
       if (p.sw && !p.sw.def.air) p.sw = null;
     }
   } else p.vx = approach(p.vx, 0, 900 * dt);
   if (p.dash <= 0) p.vy += GRAV * dt;
   p.x += p.vx * dt; p.y += p.vy * dt;
-  if (p.y >= GROUND) { if (!p.onGround && p.vy > 300) { dust(p.x, GROUND, 5); if (!p.sw && p.sab) Object.assign(p.sab, { w: 1, lean: 0.2, cr: 15, hip: 0, rf: -19, ff: 19, rl: 0, fl: 0 }); } p.y = GROUND; p.vy = 0; p.onGround = true; p.jumps = 0; p.airRise = false; }
+  if (p.y >= GROUND) { if (!p.onGround && p.vy > 300) { dust(p.x, GROUND, 5); sfx('land'); if (!p.sw && p.sab) Object.assign(p.sab, { w: 1, lean: 0.2, cr: 15, hip: 0, rf: -19, ff: 19, rl: 0, fl: 0 }); } p.y = GROUND; p.vy = 0; p.onGround = true; p.jumps = 0; p.airRise = false; }
   else if (p.y < GROUND - 1) p.onGround = false;
   p.x = clamp(p.x, 30, WORLD - 30);
   p.run += Math.abs(p.vx) * dt * 0.045;
@@ -1329,7 +1437,8 @@ function doClash(e) {
   e.sw = null; e.comboLeft = 0; setState(e, 'recover', e.armor ? 0.36 : 0.48); e.cool = Math.max(e.cool, 0.4); e.vx = dir * 120 * heavy;
   const A = pose(p), B = pose(e), at = segHit(A.hand, A.tip, B.hand, B.tip) || { x: (A.tip.x + B.tip.x) / 2, y: (A.tip.y + B.tip.y) / 2 };
   sparks(at.x, at.y, 22, '#fff', 560); sparks(at.x, at.y, 10, p.blade, 420); sparks(at.x, at.y, 10, e.blade, 420);
-  sfx('clash'); sfx('parry'); hitstop = Math.max(hitstop, 0.085); shake = Math.max(shake, 8); flash = Math.max(flash, 0.08);
+  flare(at.x, at.y, 96, '#fff', 0.24); p.glowN = e.glowN = frameN + 16;
+  sfx('bigclash'); hitstop = Math.max(hitstop, 0.085); shake = Math.max(shake, 8); flash = Math.max(flash, 0.1);
   floatText(at.x, at.y - 26, 'CLASH', '#fff', 18); p.en = Math.min(p.maxEn, p.en + 6);
 }
 // the contact is over: the blades spring off each other and the fighters are driven apart
@@ -1344,20 +1453,26 @@ let frameN = 0;
 function checkClash() {
   frameN++;
   const p = player, s = p.sw, d = s && s.def;
-  const pLive = s && d.keys && !d.noHit && !d.fin && !p.nun && p.hp > 0 && (k => k > (d.act || ACT)[0] - 0.14 && k < (d.act || ACT)[1])(swK(s));
-  const [pc, pp] = pLive ? bladeOf(p) : [null, null];
+  if (p.nun || p.hp <= 0) return;
+  const pCut = !!(s && d.keys && !d.noHit), pLive = pCut && !d.fin && (k => k > (d.act || ACT)[0] - 0.14 && k < (d.act || ACT)[1])(swK(s));
+  const [pc, pp] = bladeOf(p);
   for (const e of enemies) {
-    const live = e.melee && e.blade && e.state === 'swing' && e.sw && e.sw.def && !e.sw.struck;
-    if (!live) continue;
+    if (!e.melee || !e.blade || e.gun) continue;
+    const live = e.state === 'swing' && e.sw && e.sw.def && !e.sw.struck;
+    if (!live && !pCut) continue;
     const [ec, ep] = bladeOf(e);
-    if (!pLive || Math.abs(e.x - p.x) > 190 * e.scale) continue;
+    if (Math.abs(e.x - p.x) > 190 * e.scale) continue;
     // kiri-otoshi stays the exception: a men cut straight down the centre goes through another overhead cut instead of stopping on it
-    if (d.h === 'high' && d.nm && e.sw.def.h === 'high') continue;
+    if (pLive && live && d.h === 'high' && d.nm && e.sw.def.h === 'high') continue;
     const pS = [[pc.h, pc.t], [pp.t, pc.t]], eS = [[ec.h, ec.t], [ep.t, ec.t]];
     let at = null; for (const a of pS) for (const b of eS) at = at || segHit(a[0], a[1], b[0], b[1]);
     if (!at) continue;
-    doClash(e);
-    return;
+    if (pLive && live) { doClash(e); return; }
+    // any other touch while a blade is moving (a cut brushing past a guard, a blade crossed in the wind-up) still shows and sounds
+    if (!(e.grazeN > frameN) && !(e.clashT > 0) && !(e.blockT > 0) && !(p.lockT > 0)) {
+      e.grazeN = frameN + 24; flare(at.x, at.y, 28, '#fff', 0.1); sparks(at.x, at.y, 5, '#fff', 260); sparks(at.x, at.y, 3, e.blade, 220);
+      p.glowN = e.glowN = frameN + 8; sfx('graze');
+    }
   }
 }
 function step(dt) {
@@ -1379,7 +1494,7 @@ function step(dt) {
     } else if (b.owner === 'p') {
       for (const e of enemies) {
         if (Math.abs(b.x - e.x) < e.w + 10 && b.y > e.y - e.h - 6 && b.y < e.y + 6) {
-          if (e.melee && e.block && e.state === 'chase' && Math.random() < e.block * 0.6) { e.blockT = 0.25; sparks(b.x, b.y, 8, '#fff', 300); sfx('clash'); }
+          if (e.melee && e.block && e.state === 'chase' && Math.random() < e.block * 0.6) { e.blockT = 0.25; sparks(b.x, b.y, 8, '#fff', 300); flare(b.x, b.y, 30, '#fff', 0.1); e.glowN = frameN + 8; sfx('deflect'); }
           else damageEnemy(e, b.dmg, Math.sign(b.vx) || 1, 180, false, true);
           dead = true; break;
         }
@@ -1400,6 +1515,7 @@ function step(dt) {
     if (d.life <= 0) debris.splice(i, 1);
   }
   for (let i = texts.length - 1; i >= 0; i--) { const t = texts[i]; t.life -= dt; if (!t.hud) t.y -= 40 * dt; if (t.life <= 0) texts.splice(i, 1); }
+  for (let i = flares.length - 1; i >= 0; i--) if ((flares[i].life -= dt) <= 0) flares.splice(i, 1);
   for (let i = ghosts.length - 1; i >= 0; i--) { ghosts[i].life -= dt; if (ghosts[i].life <= 0) ghosts.splice(i, 1); }
   for (let i = orbs.length - 1; i >= 0; i--) { const o = orbs[i]; o.life -= dt; o.vy += 900 * dt; o.y += o.vy * dt; if (o.y > GROUND - 14) { o.y = GROUND - 14; o.vy = 0; } if (o.life <= 0) orbs.splice(i, 1); }
   if (hitTimer > 0) { hitTimer -= dt; if (hitTimer <= 0) hits = 0; }
@@ -1419,7 +1535,7 @@ function step(dt) {
     if (waveDone) { clearT -= dt; if (clearT <= 0) openUpgrades(); }
   } else {
     deadT += dt;
-    if (deadT > 1.1 && state === 'play') { state = 'over'; uiT = 0; if (score > best) { best = score; store.set('ss_best', String(best)); } }
+    if (deadT > 1.1 && state === 'play') { state = 'over'; uiT = 0; sfx('over'); if (score > best) { best = score; store.set('ss_best', String(best)); } }
   }
   // camera
   const target = clamp(p.x + p.facing * 70 - viewW / 2, 0, Math.max(0, WORLD - viewW));
@@ -1579,6 +1695,7 @@ function drawFigure(e) {
     let boost = 0;
     if (e.state === 'windup') boost = 1 - e.stateT / e.windT;
     if (e.sw) boost = 0.5;
+    if (e.glowN > frameN) boost = Math.max(boost, Math.min(1.4, (e.glowN - frameN) / 9));   // the blade flares where it has just touched another
     const bw = 3.2 * s * (e.bladeW || 1);
     drawBlade(P.hand.x + P.dir.x * 4 * s, P.hand.y + P.dir.y * 4 * s, P.tip.x, P.tip.y, e.blade, bw, boost);
     if (e.twin) drawBlade(back.x, back.y, back.x - P.dir.x * e.bladeLen * s, back.y - P.dir.y * e.bladeLen * s, e.blade, bw, boost);
@@ -1683,6 +1800,16 @@ function drawWorld() {
     else if (q.dust) { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a * 0.5; ctx.fillStyle = q.color; ctx.beginPath(); ctx.arc(q.x, q.y, q.size * (2 - a), 0, 6.2832); ctx.fill(); ctx.globalCompositeOperation = 'lighter'; }
     else { ctx.globalAlpha = a; ctx.strokeStyle = q.color; ctx.lineWidth = q.size; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x - q.vx * 0.025, q.y - q.vy * 0.025); ctx.stroke(); }
   }
+  for (const f of flares) { // blade contact: a hot white core, a halo, and a four-point glint
+    const k = clamp(f.life / f.max, 0, 1), r = f.r * (1.25 - k * 0.5);
+    ctx.globalAlpha = k; ctx.shadowColor = f.col; ctx.shadowBlur = r * 0.9 * zoom * DPR;
+    ctx.globalAlpha = k * 0.45; ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, r * 0.34, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = k; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(f.x, f.y, r * 0.15, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let i = 0; i < 4; i++) { const a = f.a + i * 0.785, L = r * (i % 2 ? 0.7 : 1.5) * k, cx = Math.cos(a) * L, cy = Math.sin(a) * L; ctx.moveTo(f.x - cx, f.y - cy); ctx.lineTo(f.x + cx, f.y + cy); }
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   ctx.restore();
   // enemy hp bars + texts
   for (const e of enemies) {
@@ -1830,6 +1957,7 @@ function clickUI() {
 function update(rdt) {
   uiT += rdt; if (flash > 0) flash -= rdt; shake = Math.max(0, shake - rdt * 45);
   if (hit('KeyM')) muted = !muted;
+  audioFrame(rdt);
   if (state === 'title') {
     if (hit('ArrowLeft', 'KeyA')) { bladeIdx = (bladeIdx + BLADES.length - 1) % BLADES.length; store.set('ss_blade', String(bladeIdx)); sfx('ui'); }
     if (hit('KeyT')) toggleTurtle();
