@@ -448,7 +448,7 @@ function newPlayer() {
     type: 'player', x: WORLD / 2, y: GROUND, vx: 0, vy: 0, facing: 1, onGround: true, jumps: 0,
     hp: 100, maxHp: 100, en: 100, maxEn: 100, regen: 22, scale: 1, color: turtleMode ? '#86d44e' : '#f2f2f2', blade: turtleMode === 1 ? STEEL : turtleMode === 2 ? '#e0a860' : BLADES[bladeIdx], turtle: turtleMode > 0, steel: turtleMode === 1, nun: turtleMode === 2, band: turtleMode === 2 ? '#fff04a' : '#f4f1e8', idleT: 2,
     bladeLen: 58, head: 'round', w: 14, h: 90, sw: null, comboIdx: 0, comboTimer: 0, queued: null, atkCool: 0, rot: { high: 0, mid: 0, low: 0 }, airRise: false,
-    blocking: false, blockAge: 0, blockH: 'mid', guard: 'chudan', guardT: 4, nuki: 0, hold: null, lastDef: null, riposte: 0, near: false, flourish: false, buf: null, bufT: 0, dash: 0, dashCool: 0, dashDir: 1, invuln: 0, stun: 0, pushCool: 0,
+    blocking: false, blockAge: 0, blockH: 'mid', guard: 'chudan', guardT: 4, nuki: 0, zan: 0, hold: null, lastDef: null, riposte: 0, near: false, flourish: false, buf: null, bufT: 0, dash: 0, dashCool: 0, dashDir: 1, invuln: 0, stun: 0, pushCool: 0,
     hitFlash: 0, run: 0, animT: 0, trail: [], ghostT: 0,
     dmgMul: 1, reachMul: 1, speedMul: 1, siphon: 0, pushDmg: 0, pushPow: 1, dashCost: 15, reflectMul: 1
   };
@@ -523,6 +523,7 @@ function saberTarget(e) {
     const h = d && d.hand ? d.hand(k) : [Math.cos(ha) * 25, Math.sin(ha) * 25 + 4];
     return { a, hx: h[0], hy: h[1], two: 1, snap: true };
   }
+  if (e.zan > 0 && !e.blocking) return { a: 0.2 + Math.sin(t * 1.5) * 0.03, hx: 21, hy: 15 + Math.sin(t * 1.9), two: 1, rate: 5.5 }; // point held on the fallen opponent, unhurried
   if (e.lockT > 0) return { a: -1.3 + Math.sin(t * 38) * 0.035, hx: 24 + Math.sin(t * 9) * 1.5, hy: 11, two: 1, rate: 34 }; // guards locked, hands kept low, blades crossed upright
   if (e.gun) { const ha = e.aim * 0.55; return { a: e.aim, hx: Math.cos(ha) * 22, hy: Math.sin(ha) * 22 + 4, two: 1, snap: true }; }
   if (e.blocking || e.blockT > 0) { const B = BLOCKS[e.blockH] || BLOCKS.mid; return { a: B.a + Math.sin(t * 3.1) * 0.04, hx: B.hx, hy: B.hy + Math.sin(t * 2.3) * 1.2, two: 1, rate: 30 }; }
@@ -747,6 +748,7 @@ function kill(e) {
   floatText(e.x, e.y - e.h - 16, '+' + e.score, '#ffd23a', 16);
   sparks(e.x, e.y - e.h * 0.5, 22, e.blade || '#ffb347', 520);
   if (player.siphon && player.hp > 0) player.hp = Math.min(player.maxHp, player.hp + player.siphon);
+  if (!player.nun && player.onGround && Math.abs(e.x - player.x) < 200) { player.zan = 1.1; player.zanX = e.x; } // zanshin: the cut is not over when it lands
   if (Math.random() < (e.boss ? 1 : 0.16)) orbs.push({ x: e.x, y: e.y - 40, vy: -260, life: 12 });
   if (!enemies.length && !queue.length) { slowT = 0.9; flash = 0.25; }
   else if (e.boss) { slowT = 0.9; flash = 0.3; }
@@ -835,6 +837,7 @@ function updatePlayer(dt) {
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
   const stunned = p.stun > 0; if (stunned) p.stun -= dt;
   p.riposte -= dt; p.nuki -= dt; p.near = !!nearestEnemy(380);
+  if (p.zan > 0) { p.zan -= dt; if (!p.sw && !mx) p.facing = Math.sign(p.zanX - p.x) || p.facing; if (mx || p.dash > 0 || nearestEnemy(150)) p.zan = 0; if (p.zan <= 0 && !p.hold) { p.guard = 'chudan'; p.guardT = 1.5; } }
   if (p.lockT > 0) { // pressing in the bind; it ends with a shove apart, or sooner if either of us acts
     const le = p.lockE, alive = le && enemies.includes(le) && le.lockT > 0;
     p.lockT -= dt; if (p.sw || p.dash > 0 || !alive || Math.abs(le.x - p.x) > 96 * le.scale) { p.lockT = 0; if (alive && (p.sw || p.dash > 0)) le.lockT = Math.min(le.lockT, 0.12); }
