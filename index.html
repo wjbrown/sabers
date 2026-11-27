@@ -1508,10 +1508,27 @@ function checkClash() {
     }
   }
 }
+// Bodies are solid: nobody walks through anybody. A dash still slips through (that is what it is for) and a jump clears a
+// head. Walking into someone shoves them, slowly; the heavier they are, the less they give.
+function collide() {
+  const p = player; if (p.hp <= 0 || p.dash > 0) return;
+  for (const e of enemies) {
+    if (e.hover || !e.entered || e.hp <= 0) continue;
+    if (p.y < e.y - e.h * 0.75 || e.y < p.y - 70) continue;                       // one of us is over the other's head
+    const D = 15 + 17 * e.scale, dx = e.x - p.x, ov = D - Math.abs(dx); if (ov <= 0) continue;
+    const side = Math.sign(dx) || (p.lastSide || p.facing), give = e.armor ? 0.1 : e.boss ? 0.2 : 0.5; p.lastSide = side;
+    const px = p.x, ex = e.x;
+    p.x = clamp(p.x - side * ov * (1 - give), 30, WORLD - 30); e.x = clamp(e.x + side * ov * give, 20, WORLD - 20);
+    const left = D - Math.abs(e.x - p.x);                                          // someone is against the wall: the other takes the rest
+    if (left > 0.01) { if (Math.abs(p.x - px) < ov * (1 - give) - 0.01) e.x = clamp(e.x + side * left, 20, WORLD - 20); else p.x = clamp(p.x - side * left, 30, WORLD - 30); }
+    if (p.vx * side > 0 && p.onGround) p.vx *= 0.8; if (e.vx * side < 0) e.vx *= 0.8;
+  }
+}
 function step(dt) {
   checkClash();
   updatePlayer(dt);
   for (const e of enemies.slice()) updateEnemy(e, dt);
+  collide();
   const p = player;
   // bolts
   for (let i = bolts.length - 1; i >= 0; i--) {
