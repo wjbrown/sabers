@@ -651,10 +651,11 @@ function toddlerInput() {
   if (mash) { const c = kid.n++ % 2 ? 'KeyR' : 'KeyF'; pressed.add(c); keys.add(c); }
 }
 function cheer(e) {
-  kid.stars++; const c = KID_COLORS[kid.stars % KID_COLORS.length];
+  kid.stars++; kid.say = true; const c = KID_COLORS[kid.stars % KID_COLORS.length];
   floatText(e.x, e.y - e.h - 30, KID_CHEERS[Math.floor(rand(KID_CHEERS.length))], c, 34);
   sparks(e.x, e.y - e.h * 0.6, 26, c, 520); sparks(e.x, e.y - e.h * 0.6, 14, '#fff', 420); flare(e.x, e.y - e.h * 0.6, 70, c, 0.3);
   sfx('heal'); if (kid.stars % 5 === 0) { sfx('wave'); floatText(player.x, player.y - 150, kid.stars + ' STARS!', '#ffd23a', 30); }
+  kid.say = false;
 }
 function demoAI(dt) {
   keys.clear(); pressed.clear();
@@ -978,7 +979,7 @@ function contact(a, b, r = 46) { const at = crossPt(a, b); flare(at.x, at.y, r);
 function dust(x, y, n) {
   for (let i = 0; i < n; i++) parts.push({ x: x + rand(-8, 8), y, vx: rand(-90, 90), vy: rand(-70, -10), life: rand(0.25, 0.5), max: 0.5, color: '#6d6a85', g: 60, size: rand(2, 4), dust: true });
 }
-function floatText(x, y, txt, color = '#fff', size = 18) { texts.push({ x, y, txt, life: 0.9, max: 0.9, color, size }); }
+function floatText(x, y, txt, color = '#fff', size = 18) { if (toddler && !kid.say) return; texts.push({ x, y, txt, life: 0.9, max: 0.9, color, size }); }
 function shatter(e) {
   if (e.hover) {
     for (let i = 0; i < 7; i++) debris.push({ x: e.x, y: e.y - 17, len: rand(8, 20), ang: rand(6.28), vx: rand(-260, 260), vy: rand(-380, -60), va: rand(-12, 12), color: e.color, life: 2.5, w: 4 });
@@ -2020,7 +2021,7 @@ function update(rdt) {
     if (practice && !paused && hit('KeyT')) { drill = (drill + 1) % DRILLS.length; sfx('ui'); }
     if (!paused) {
       if (hitstop > 0) hitstop -= rdt;
-      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts * speed / 100 * (toddler ? 0.6 : 1)); }
+      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts * speed / 100 * (toddler ? 0.8 : 1)); }
     }
   } else if (state === 'upgrade') {
     if (uiT > 0.35) { if (hit('Digit1')) pickUpgrade(0); else if (hit('Digit2')) pickUpgrade(1); else if (hit('Digit3')) pickUpgrade(2); else clickUI(); }
