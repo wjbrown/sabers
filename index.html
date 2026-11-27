@@ -55,7 +55,7 @@ cv.addEventListener('contextmenu', e => e.preventDefault());
 const down = (...c) => c.some(k => keys.has(k));
 const hit = (...c) => c.some(k => pressed.has(k));
 const K = {
-  left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], jump: ['KeyW', 'Space', 'ArrowUp'],
+  left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], jump: ['KeyW', 'ArrowUp'],
   high: ['KeyR'], mid: ['KeyF', 'Mouse0'], low: ['KeyC'], block: ['KeyQ', 'Mouse2'],
   dash: ['ShiftLeft', 'ShiftRight'], push: ['KeyE']
 };
@@ -188,6 +188,7 @@ function sfx(n) {
       noise('lowpass', 2500, 120, 0.4, 0.45); tone('sawtooth', 300, 40, 0.4, 0.12);
       for (let i = 0; i < 4; i++) tone('sine', rand(1800, 4200), rand(900, 1500), 0.18, 0.05, i * 0.03);
       break;
+    case 'focus': tone('sine', 520, 130, 0.35, 0.25); noise('lowpass', 1800, 200, 0.4, 0.3); break;
     case 'stun': tone('sawtooth', 520, 90, 0.35, 0.18); noise('bandpass', 2000, 500, 0.3, 0.3, 0.8, 0, crackBuf); break;
     case 'ignite':
       if (w === 1) { noise('bandpass', 2500, 7000, 0.35, 0.22, 6); ring(1.3, 0.6); }
@@ -220,6 +221,7 @@ let wave, score, hits, hitTimer, queue, spawnT, waveIntro, waveDone, clearT, max
 let camX = 0, shake = 0, hitstop = 0, slowT = 0, deadT = 0, flash = 0;
 let upgradeChoices = [], uiRects = [];
 let demo = false; const ai = {};
+let focus = false, spent = false;   // time slowed by the player (Space)
 let toddler = false; const kid = { n: 0, gap: 0, stars: 0 };
 let practice = false, drill = 0; const DRILLS = ['STANDS STILL', 'BLOCKS EVERYTHING', 'ATTACKS YOU'], pr = { last: 0, combo: 0, name: '' };
 
@@ -602,7 +604,7 @@ function startGame() {
   player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = [];
   wave = 0; score = 0; hits = 0; hitTimer = 0; deadT = 0; hitstop = 0; slowT = 0; shake = 0;
   camX = clamp(player.x - viewW / 2, 0, Math.max(0, WORLD - viewW));
-  state = 'play'; paused = false; practice = false; demo = false; toddler = false; flares.length = 0; sfx('ignite'); nextWave();
+  state = 'play'; paused = false; practice = false; demo = false; toddler = false; focus = false; flares.length = 0; sfx('ignite'); nextWave();
 }
 // Practice: one tireless partner, no waves, nothing to lose. T changes what the partner does.
 function spawnPartner() {
@@ -1183,7 +1185,7 @@ function updatePlayer(dt) {
     for (const e of enemies) if (e.sw && e.sw.def && (e.state === 'windup' || e.state === 'swing')) { const dd = Math.abs(e.x - p.x); if (dd < bd) { bd = dd; th = e; } }
     p.blockH = th ? th.sw.def.h || 'mid' : 'mid';
   }
-  if (!p.blocking) p.en = Math.min(p.maxEn, p.en + p.regen * dt);
+  if (!p.blocking && !focus) p.en = Math.min(p.maxEn, p.en + p.regen * dt);
 
   // dash
   if (hit(...K.dash) && !stunned && p.dashCool <= 0 && p.en >= p.dashCost && p.dash <= 0) {
@@ -1904,6 +1906,7 @@ function drawHUD() {
   const z = zoom * DPR; ctx.setTransform(z, 0, 0, z, 0, 0);
   const p = player;
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, viewW, VIEW_H); }
+  if (focus) { ctx.fillStyle = 'rgba(70,150,255,0.10)'; ctx.fillRect(0, 0, viewW, VIEW_H); text('SLOW', 196, 80, 11, '#9cc8ff', 'left'); }
   if (toddler) {
     text('\u2605 ' + kid.stars, viewW / 2, 70, 54, '#ffd23a');
     ctx.globalAlpha = 0.6 + Math.sin(uiT * 4) * 0.4; text('PRESS  SPACE!', viewW / 2, VIEW_H - 56, 34, '#fff'); ctx.globalAlpha = 1;
@@ -1950,7 +1953,7 @@ function drawHUD() {
   if (waveIntro > 0 && state === 'play') { const a = clamp(Math.min(waveIntro, 1.8 - waveIntro) * 3, 0, 1); ctx.globalAlpha = a; text(wave % 5 === 0 ? 'BOSS WAVE' : 'WAVE ' + wave, viewW / 2, 220, 64, wave % 5 === 0 ? '#ff3b3b' : '#fff'); ctx.globalAlpha = 1; }
   if (waveDone && state === 'play') text('WAVE CLEARED', viewW / 2, 220, 48, '#ffd23a');
   for (const t of texts) { if (!t.hud) continue; ctx.globalAlpha = clamp(Math.min(t.life, t.max - t.life) * 2, 0, 1); text(t.txt, viewW / 2, 290, t.size, t.color); ctx.globalAlpha = 1; }
-  if (wave === 1 && state === 'play') { ctx.globalAlpha = 0.75; text('A/D move  ·  W/Space jump  ·  R high  ·  F mid  ·  C low  ·  Q/Right-click block  ·  Shift dash  ·  E push  ·  1–5 stance', viewW / 2, VIEW_H - 16, 13, '#cfcfe6', 'center', 600); ctx.globalAlpha = 1; }
+  if (wave === 1 && state === 'play') { ctx.globalAlpha = 0.75; text('A/D move  ·  W jump  ·  Space slow time  ·  R high  ·  F mid  ·  C low  ·  Q/Right-click block  ·  Shift dash  ·  E push  ·  1–5 stance', viewW / 2, VIEW_H - 16, 13, '#cfcfe6', 'center', 600); ctx.globalAlpha = 1; }
   if (paused) { ctx.fillStyle = 'rgba(5,4,12,0.7)'; ctx.fillRect(0, 0, viewW, VIEW_H); text('PAUSED', viewW / 2, 290, 56); text('P or Esc to resume', viewW / 2, 330, 16, '#aaa', 'center', 600); }
 }
 function overlay(a) { ctx.fillStyle = `rgba(5,4,12,${a})`; ctx.fillRect(0, 0, viewW, VIEW_H); }
@@ -1994,7 +1997,7 @@ function drawTitle() {
     text('B  ·  TODDLER MODE', viewW / 2, y + 16, 12, '#cfcfe6');
     uiRects.push({ x, y, w, h: 24, fn: () => { sfx('ui'); pressed.clear(); startToddler(); } }); }
   const c = '#cfcfe6';
-  text('A / D  move      W / Space  jump (double)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
+  text('A / D  move      W  jump (double)      Space  slow time (uses energy)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
   text('Shift  dash through attacks      E  energy push      1–5  stance (each covers one line)      P  pause      M  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
   if (best) text('BEST ' + best, viewW - 24, 36, 16, '#ffd23a', 'right');
@@ -2059,7 +2062,13 @@ function update(rdt) {
     if (practice && !paused && hit('KeyT')) { drill = (drill + 1) % DRILLS.length; sfx('ui'); }
     if (!paused) {
       if (hitstop > 0) hitstop -= rdt;
-      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts * speed / 100 * (toddler ? 0.8 : 1)); }
+      else {
+        // Space: slow time to half speed for as long as it is held and there is energy to pay for it
+        const want = !toddler && !demo && keys.has('Space') && player.hp > 0;
+        if (!want) focus = spent = false; else if (!focus && !spent && player.en >= 12) { focus = true; sfx('focus'); }
+        if (focus) { player.en -= 28 * rdt; if (player.en <= 0) { player.en = 0; focus = false; spent = true; sfx('stun'); } } // run dry: let go before using it again
+        let ts = focus ? 0.5 : 1; if (slowT > 0) { slowT -= rdt; ts = Math.min(ts, 0.3); } step(rdt * ts * speed / 100 * (toddler ? 0.8 : 1));
+      }
     }
   } else if (state === 'upgrade') {
     if (uiT > 0.35) { if (hit('Digit1')) pickUpgrade(0); else if (hit('Digit2')) pickUpgrade(1); else if (hit('Digit3')) pickUpgrade(2); else clickUI(); }
