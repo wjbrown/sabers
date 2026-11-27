@@ -243,16 +243,18 @@ const mv = (props, k) => Object.assign(props, { keys: mkKeys(k) });
 // Kamae. Kendo's five (chudan, jodan, gedan, hasso, waki), its right-foot jodan and seigan, plus kasumi from the older
 // sword schools. Each one chambers a different strike, so the stance you stand in decides what comes out fastest.
 const GUARDS = {
-  chudan: { n: 1, name: 'CHUDAN', sub: 'middle · tip at the throat', a: -0.52, hx: 15, hy: 22, cat: 'mid' },
-  jodan:  { n: 2, name: 'JODAN', sub: 'upper · left foot forward', a: -2.36, hx: 4, hy: -27, cat: 'hi', lean: -0.05 },
-  gedan:  { n: 3, name: 'GEDAN', sub: 'lower · tip at the knee', a: 0.55, hx: 15, hy: 21, cat: 'lo' },
-  hasso:  { n: 4, name: 'HASSO', sub: 'blade upright at the shoulder', a: -1.72, hx: -3, hy: -3, cat: 'hi', lean: -0.03 },
-  waki:   { n: 5, name: 'WAKI', sub: 'blade hidden behind the hip', a: 2.55, hx: -9, hy: 20, cat: 'lo', cr: 4, lean: 0.04 },
+  chudan: { n: 1, name: 'CHUDAN', line: 'mid', sub: 'middle · balanced · kote combinations', a: -0.52, hx: 15, hy: 22, cat: 'mid' },
+  jodan:  { n: 2, name: 'JODAN', line: 'high', sub: 'upper · fastest overhead cut · body open', a: -2.36, hx: 4, hy: -27, cat: 'hi', lean: -0.05 },
+  gedan:  { n: 3, name: 'GEDAN', line: 'low', sub: 'lower · invites the attack · best counters', a: 0.55, hx: 15, hy: 21, cat: 'lo' },
+  hasso:  { n: 4, name: 'HASSO', line: 'high', sub: 'at the shoulder · fast follow-up cuts', a: -1.72, hx: -3, hy: -3, cat: 'hi', lean: -0.03 },
+  waki:   { n: 5, name: 'WAKI', line: 'low', sub: 'blade hidden · slow, heaviest cut · blade sweep', a: 2.55, hx: -9, hy: 20, cat: 'lo', cr: 4, lean: 0.04 },
   seigan: { n: 6, name: 'SEIGAN', sub: 'tip at the eyes', a: -0.8, hx: 21, hy: 15, cat: 'mid' },
   kasumi: { n: 7, name: 'KASUMI', sub: 'hilt by the temple, point forward', a: 0.12, hx: 3, hy: -23, cat: 'hi', cr: 4 },
   migi:   { n: 8, name: 'MIGI JODAN', sub: 'upper · right foot forward', a: -1.95, hx: 7, hy: -30, cat: 'hi' }
 };
-const KAMAE = Object.keys(GUARDS), END_GUARD = { hi: 'hasso', lo: 'gedan', mid: 'chudan' };
+// Five stances, each with a job, each covering one line: a cut on that line is stopped without the block button.
+// (seigan, kasumi and migi-jodan remain as blade positions that moves pass through, but are no longer selectable.)
+const KAMAE = ['chudan', 'jodan', 'gedan', 'hasso', 'waki'], END_GUARD = { hi: 'hasso', lo: 'gedan', mid: 'chudan' };
 // Parries deflect rather than stop: the blade is angled so the blow slides off, and placed by the height of the attack.
 const BLOCKS = { high: { a: -2.85, hx: 17, hy: -25 }, mid: { a: -1.5, hx: 25, hy: 4 }, low: { a: 1.15, hx: 19, hy: 17 } };
 // Swing progress 0..1. A "quickened" swing (sw.c) compresses the chamber when the blade is already in the right guard.
@@ -411,8 +413,8 @@ HIKI.low = HIKI.mid;
 // renzoku-waza (kote-men, kote-do, men-do, tsuki-men) and the strike each kamae is built to throw
 { const [MEN, , MEN_S] = MOVES.high, [DO, , TSUKI, KOTE] = MOVES.mid;
   KOTE.next = { high: MEN_S, mid: DO }; MEN.next = { high: SAYU_MEN }; JODAN_MEN.next = { high: SAYU_MEN }; HARAI_MEN.next = { high: SAYU_MEN }; MEN_S.next = { high: MEN, mid: DO }; TSUKI.next = { high: MEN_S };
-  GUARDS.chudan.pref = { mid: KOTE }; GUARDS.seigan.pref = { mid: TSUKI, high: HARAI_MEN }; GUARDS.kasumi.pref = { mid: TSUKI, low: MOVES.low[2] };
-  GUARDS.jodan.pref = { high: JODAN_MEN }; GUARDS.gedan.pref = { mid: TSUKI, low: MOVES.low[1] }; GUARDS.waki.pref = { low: MOVES.low[0] }; }
+  GUARDS.chudan.pref = { mid: KOTE }; GUARDS.jodan.pref = { high: JODAN_MEN }; GUARDS.gedan.pref = { mid: TSUKI, low: MOVES.low[1] };
+  GUARDS.waki.pref = { high: HARAI_MEN, low: MOVES.low[0] }; GUARDS.hasso.pref = { low: MOVES.low[2] }; }
 // ── Nunchaku ──────────────────────────────────────────────────────────────────────────────
 // One-handed, wrist-driven: whips that snap out and recoil, and whirls (figure-eight, overhead, low windmill) that strike
 // more than once. `multi` lists the points in a move where it can hit the same target again.
@@ -564,7 +566,7 @@ const E_MOVES = {
 const E_SWING = { heavy: 0.42, boss: 0.27 };
 // Each kind of fighter keeps to the guards that suit its temperament. Tradition pairs the five kamae with the five elements:
 // jodan is fire (all attack), chudan water (adaptable), gedan earth (patient), hasso wood, waki metal (concealed).
-const E_KAMAE = { grunt: ['chudan', 'hasso', 'gedan'], duelist: ['chudan', 'seigan', 'gedan', 'waki', 'kasumi'], heavy: ['jodan', 'migi', 'hasso'], boss: ['jodan', 'kasumi', 'waki', 'seigan'] };
+const E_KAMAE = { grunt: ['chudan', 'hasso', 'gedan'], duelist: ['chudan', 'gedan', 'waki', 'jodan'], heavy: ['jodan', 'hasso'], boss: ['jodan', 'waki', 'chudan', 'gedan'] };
 
 const TYPES = {
   grunt:   { name: 'Blade Grunt', hp: 38, speed: 150, dmg: 9, block: 0.15, windup: 0.5, recover: 0.5, cooldown: 1.1, combo: 1, scale: 1, color: '#9aa0ad', blade: '#ff3b3b', bladeLen: 54, reach: 82, lunge: 220, score: 100, head: 'round', melee: true },
@@ -591,7 +593,7 @@ function newPlayer() {
     type: 'player', x: WORLD / 2, y: GROUND, vx: 0, vy: 0, facing: 1, onGround: true, jumps: 0,
     hp: 100, maxHp: 100, en: 100, maxEn: 100, regen: 22, scale: 1, color: turtleMode ? '#86d44e' : '#f2f2f2', blade: turtleMode === 1 ? STEEL : turtleMode === 2 ? '#e0a860' : BLADES[bladeIdx], turtle: turtleMode > 0, steel: turtleMode === 1, nun: turtleMode === 2, band: turtleMode === 2 ? '#fff04a' : '#f4f1e8', idleT: 2,
     bladeLen: 58, head: 'round', w: 14, h: 90, sw: null, comboIdx: 0, comboTimer: 0, queued: null, atkCool: 0, rot: { high: 0, mid: 0, low: 0 }, airRise: false,
-    blocking: false, blockAge: 0, blockH: 'mid', guard: 'chudan', guardT: 4, nuki: 0, zan: 0, hold: null, lastDef: null, riposte: 0, near: false, flourish: false, buf: null, bufT: 0, dash: 0, dashCool: 0, dashDir: 1, invuln: 0, stun: 0, pushCool: 0,
+    blocking: false, blockAge: 0, blockH: 'mid', guard: 'chudan', guardT: 4, nuki: 0, zan: 0, hold: turtleMode === 2 ? null : 'chudan', lastDef: null, riposte: 0, near: false, flourish: false, buf: null, bufT: 0, dash: 0, dashCool: 0, dashDir: 1, invuln: 0, stun: 0, pushCool: 0,
     hitFlash: 0, run: 0, animT: 0, trail: [], ghostT: 0,
     dmgMul: 1, reachMul: 1, speedMul: 1, siphon: 0, pushDmg: 0, pushPow: 1, dashCost: 15, reflectMul: 1
   };
@@ -627,7 +629,7 @@ function startDemo() {
   spawnRival();
 }
 const AI_PLANS = [[1, 'F', 'R', 'R'], [1, 'F', 'F', 'F'], [1, 'C', 'R'], [2, 'R', 'R', 'F'], [2, 'R'], [3, 'F', 'R'], [3, 'R', 'F', 'F'], [3, 'C', 'R', 'R'], [4, 'R', 'R', 'R'], [4, 'F', 'C'],
-  [5, 'F', 'R'], [5, 'C', 'F', 'R'], [6, 'R', 'R'], [6, 'F', 'R'], [6, 'C', 'F'], [7, 'F', 'C'], [7, 'R', 'F'], [8, 'R', 'F', 'F'], [0, 'C', 'C', 'C'], [0, 'R'], [0, 'F'], [0, 'E']];
+  [5, 'F', 'R'], [5, 'C', 'F', 'R'], [5, 'R', 'R'], [4, 'C', 'F'], [2, 'F', 'C'], [3, 'R', 'F'], [0, 'C', 'C', 'C'], [0, 'R'], [0, 'F'], [0, 'E']];
 // Toddler mode: one button. Any key (the space bar is the big one) swings; the fighter walks to the next opponent by itself,
 // nothing ever hits back, and the game runs slowly. Three moves only: a side cut, an overhead cut, then a big finisher.
 const KID_COLORS = ['#ff5ad1', '#ffd23a', '#4dff7a', '#35d0ff', '#ff8a3a', '#b06bff'], KID_CHEERS = ['YAY!', 'WOW!', 'POW!', 'BOOM!', 'ZAP!', 'HOORAY!'];
@@ -698,7 +700,7 @@ function demoAI(dt) {
     if (ai.combo && !ai.combo.length) { ai.combo = null; const r = Math.random(); if (r < 0.22) { ai.fleeT = 0.8; ai.rush = Math.random() < 0.75 ? 'run' : 'leap'; } else if (r < 0.7) ai.resetT = rand(0.35, 0.9); }
     return;
   }
-  if (ai.stanceT <= 0 && !ai.plan) { ai.stanceT = rand(3, 7); if (Math.random() < 0.6) stance(1 + Math.floor(rand(8))); else if (p.hold) tap('Digit' + (KM.indexOf(p.hold) + 1)); }
+  if (ai.stanceT <= 0 && !ai.plan) { ai.stanceT = rand(3, 7); stance(1 + Math.floor(rand(KM.length))); }
   if (ai.fleeT > 0) { ai.fleeT -= dt; hold(away); return; }                                                        // run right out, to come back in at speed
   if (ai.resetT > 0) { ai.resetT -= dt; hold(away); hold('KeyQ'); return; }                                          // break off and reset the distance
   if (ai.plan) {                                                                                                   // stance taken: now strike
@@ -1000,10 +1002,15 @@ function nearestEnemy(maxD) {
   for (const e of enemies) { const d = Math.abs(e.x - player.x); if (d < bd) { bd = d; bestE = e; } }
   return bestE;
 }
+// An enemy's stance covers one line too: cut where the blade already is and it is probably stopped; cut where it is not and it probably lands.
+function blockChance(e, d) {
+  const G = GUARDS[e.guard]; if (!e.block || !d || !d.h || !G || !G.line || player.nun) return e.block;
+  return G.line === d.h ? Math.min(0.9, 0.35 + e.block) : e.block * 0.4;
+}
 function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
   e.lastHitDir = dir;
   const facingAttacker = e.facing === -dir;
-  if (e.melee && e.block && !unblockable && !(e.swept > 0) && facingAttacker && (e.state === 'chase' || e.state === 'recover') && Math.random() < e.block) {
+  if (e.melee && e.block && !unblockable && !(e.swept > 0) && facingAttacker && (e.state === 'chase' || e.state === 'recover') && Math.random() < blockChance(e, d)) {
     e.blockT = 0.35; e.blockH = d && d.h || 'mid'; e.vx += dir * (fin ? 320 : 130); e.recoil = 1;
     const at = contact(player, e, fin ? 64 : 46);
     sparks(at.x, at.y, 12, '#fff', 420); sparks(at.x, at.y, 6, e.blade, 300);
@@ -1048,6 +1055,7 @@ function kill(e) {
 }
 function hurtPlayer(dmg, dir) {
   const p = player; if (p.invuln > 0 || p.hp <= 0) return;
+  if (!p.nun && p.guard === 'jodan' && p.hitHNext === 'mid') dmg *= 1.25;   // jodan leaves the body open
   p.hp -= dmg; p.invuln = 0.55; p.hitFlash = 0.15; p.hitR = 1; p.hitDir = dir; p.hitH = p.hitHNext || 'mid'; p.hitHNext = null; p.vx = dir * 320; p.vy = -180; p.onGround = false;
   p.sw = null; p.blocking = false; p.stun = 0.18; hits = 0;
   sparks(p.x, p.y - 50, 12, '#ff4d4d', 400, dir); sfx('hurt'); shake = 12; hitstop = 0.07; flash = 0.12;
@@ -1065,15 +1073,18 @@ function enemyStrike(e, aoe) {
   if (!aoe && d && d.h === 'low' && p.y < GROUND - 28) return; // jumped clean over the leg cut
   if (!aoe && e.blade && playerCutting(e)) { doClash(e); return; }                    // both mid-cut: the blades meet
   const dir = Math.sign(p.x - e.x) || e.facing;
-  if (playerGuards(e.x)) {
+  // the stance covers its own line: a cut there is stopped without the block button (never a parry; it still costs energy)
+  const sg = !p.blocking && !aoe && d && e.blade && !p.nun && !p.sw && p.onGround && p.stun <= 0 && p.en > 0 && p.facing === -dir && GUARDS[p.guard] && GUARDS[p.guard].line === d.h;
+  if (sg) p.blockH = d.h;
+  if (playerGuards(e.x) || sg) {
     const P = pose(p);
-    if (p.blockAge < 0.22) {
+    if (!sg && p.blockAge < (p.hold === 'gedan' && !p.nun ? 0.34 : 0.22)) {
       e.state = 'stun'; e.stateT = e.boss ? 0.9 : 1.4; e.sw = null; e.comboLeft = 0; e.vx = -dir * 160;
       p.en = Math.min(p.maxEn, p.en + 20);
       const at = e.blade && !e.gun && !aoe ? contact(p, e, 84) : { x: P.tip.x, y: P.tip.y + 20 };
       sparks(at.x, at.y, 26, '#fff', 560); sparks(at.x, at.y, 10, p.blade, 420);
       sfx('parry'); slowT = Math.max(slowT, 0.3); shake = 8; flash = 0.12;
-      floatText(p.x, p.y - 120, 'PARRY!', '#fff', 24); score += 50; p.riposte = 0.8;
+      floatText(p.x, p.y - 120, 'PARRY!', '#fff', 24); score += 50; p.riposte = 0.8; p.counterB = p.hold === 'gedan' && !p.nun ? 1.9 : 1.5;
       if (!p.nun && p.onGround) { p.sw = beginSwing(p, SURIAGE); p.blocking = false; p.invuln = Math.max(p.invuln, 0.3); p.guard = 'jodan'; p.guardT = 1; }
     } else {
       p.en -= e.dmg * 1.3; p.vx = dir * (160 + e.dmg * 8);
@@ -1221,7 +1232,7 @@ function updatePlayer(dt) {
           if (!p.nun && !d.fin && e.melee && e.blade && e.state === 'swing' && e.sw && !e.sw.struck && !(d.h === 'high' && d.nm && e.sw.def.h === 'high')) { doClash(e); break; }
           const deb = e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;
           const ko = !p.nun && d.h === 'high' && d.nm && e.melee && e.state === 'swing' && e.sw && !e.sw.struck && e.sw.def.h === 'high';                // debana: caught as their attack starts
-          if (damageEnemy(e, d.dmg * p.dmgMul * (s.bonus || 1) * (deb ? 1.3 : 1), Math.sign(e.x - p.x) || p.facing, d.kb, d.fin, d.h === 'low', d)) {
+          if (damageEnemy(e, d.dmg * p.dmgMul * (s.bonus || 1) * (deb ? 1.3 : 1), Math.sign(e.x - p.x) || p.facing, d.kb, d.fin, d.h === 'low' && !(e.block && GUARDS[e.guard] && GUARDS[e.guard].line === 'low'), d)) {
             if (d.nm && !s.called) { s.called = true; floatText(p.x + p.facing * 26, p.y - 122, d.nm + '!', '#fff', 15); } // kiai: call the target
             if (deb) floatText(ex, ey - 26, 'DEBANA', '#ffd23a', 13);
             if (ko && enemies.includes(e)) { // kiri-otoshi: the straight cut down the centre rides over their cut and throws it off line
@@ -1281,7 +1292,7 @@ function updatePlayer(dt) {
 }
 function setKamae(g) {
   const p = player;
-  if (p.hold === g) { p.hold = null; p.guardT = rand(3, 6); } else { p.hold = g; p.guard = g; p.guardT = 0.5; }
+  if (p.nun && p.hold === g) { p.hold = null; p.guardT = rand(3, 6); } else { p.hold = g; p.guard = g; p.guardT = 0.5; } // the sword stance stays where you put it
   sfx('ui');
 }
 function startAttack(h, mx) {
@@ -1307,9 +1318,11 @@ function startAttack(h, mx) {
   }
   p.sw = beginSwing(p, def); p.lastDef = def;
   if (p.onGround && !def.fin && !def.auth) {
-    if (p.riposte > 0) { quicken(p.sw, 0.15); p.sw.bonus = 1.5; p.riposte = 0; floatText(p.x, p.y - 138, 'KAESHI', p.blade, 16); } // parry and answer in one motion
+    if (p.riposte > 0) { quicken(p.sw, 0.15); p.sw.bonus = p.counterB || 1.5; p.riposte = 0; floatText(p.x, p.y - 138, 'KAESHI', p.blade, 16); } // parry and answer in one motion
     else if (p.nuki > 0) { quicken(p.sw, 0.25); p.sw.bonus = 1.35; p.nuki = 0; floatText(p.x, p.y - 138, 'NUKI', p.blade, 16); }
-    else if (ready) quicken(p.sw, 0.45);                                                      // already chambered
+    else if (p.hold === 'waki' && p.comboIdx === 0 && !p.nun) { p.sw.dur *= 1.15; p.sw.bonus = 1.4; }            // waki: the long way round, and the heaviest cut
+    else if (p.hold === 'hasso' && p.comboIdx >= 1 && !p.nun) { quicken(p.sw, 0.4); p.sw.bonus = 1.15; }          // hasso: the follow-ups come fast
+    else if (ready) quicken(p.sw, p.hold === 'jodan' && h === 'high' ? 0.3 : 0.45);                              // already chambered
   }
   if (def.end) { p.guard = (p.nun ? NEND : END_GUARD)[def.end]; p.guardT = (p.hold ? 0.3 : 1.6) + def.dur; }
   p.queued = null; p.comboTimer = 0;
@@ -1897,12 +1910,13 @@ function drawHUD() {
   text('HEALTH', 24, 30, 11, '#aaa', 'left'); bar(24, 36, 220, 12, p.hp / p.maxHp, p.hp < p.maxHp * 0.3 ? '#ff4d4d' : '#4dff7a');
   text(Math.ceil(p.hp) + ' / ' + p.maxHp, 250, 47, 11, '#ddd', 'left', 600);
   text('ENERGY', 24, 66, 11, '#aaa', 'left'); bar(24, 72, 160, 8, p.en / p.maxEn, p.blade);
-  { const G = guardOf(p), KM = kamaeOf(p), GT = p.nun ? NGUARDS : GUARDS;
-    text(G.name + (p.nun || G.n === 8 ? '' : '-NO-KAMAE'), 24, 108, 15, p.blade, 'left');
-    text(G.sub + (p.hold ? '   ·   HELD — ' + GT[p.hold].n + ' again to release' : '   ·   auto — 1–' + KM.length + ' to hold'), 24, 124, 11, '#aaa', 'left', 600);
-    KM.forEach((g, i) => { const on = g === p.guard, x = 24 + i * 20;
+  { const G = guardOf(p), KM = kamaeOf(p), GT = p.nun ? NGUARDS : GUARDS, H = GT[p.hold] || G;
+    text(H.name + (p.nun ? '' : '-NO-KAMAE'), 24, 108, 15, p.blade, 'left');
+    text(p.nun ? G.sub + (p.hold ? '   ·   HELD — ' + GT[p.hold].n + ' again to release' : '   ·   auto — 1–' + KM.length + ' to hold') : H.sub, 24, 124, 11, '#aaa', 'left', 600);
+    KM.forEach((g, i) => { const on = g === (p.nun ? p.guard : p.hold), x = 24 + i * 20;
       ctx.fillStyle = on ? p.blade : g === p.hold ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'; ctx.fillRect(x, 132, 16, 16);
-      text(String(i + 1), x + 8, 144, 11, on ? '#111' : '#aaa'); }); }
+      text(String(i + 1), x + 8, 144, 11, on ? '#111' : '#aaa'); });
+    if (!p.nun) text('covers ' + H.line.toUpperCase() + ' cuts', 24 + KM.length * 20 + 6, 144, 11, '#ffd23a', 'left', 600); }
   if (demo) { text('DEMO', viewW - 24, 36, 20, '#fff', 'right'); text('computer vs computer', viewW - 24, 56, 12, '#ffd23a', 'right', 600); text('Esc  back to title', viewW - 24, 72, 12, '#aaa', 'right', 600); }
   else if (practice) {
     text('PRACTICE', viewW - 24, 36, 20, '#fff', 'right');
@@ -1912,7 +1926,7 @@ function drawHUD() {
     text('from this stance:   R  ' + nmOf('high') + '      F  ' + nmOf('mid') + '      C  ' + nmOf('low'), 24, 170, 12, '#cfcfe6', 'left', 600);
     const tech = p.nun ? ['whirls hit more than once', 'third hit of a combo: finisher', 'Q just before impact: parry', 'dash through an attack, then strike: NUKI', 'back + attack up close: retreating strike'] : [
       'Q just before impact  —  rising parry; then R: men', 'dash through an attack, then strike  —  NUKI (F: flank cut)', 'hit them in their wind-up  —  DEBANA',
-      'cut into their cut  —  the blades CLASH, nobody is hit', 'men into their overhead cut  —  KIRI-OTOSHI, yours goes through', 'blocked up close  —  bind; back + attack: retreating strike', 'stance 6, R  —  sweep their blade, then men (beats blockers)',
+      'cut into their cut  —  the blades CLASH, nobody is hit', 'men into their overhead cut  —  KIRI-OTOSHI, yours goes through', 'blocked up close  —  bind; back + attack: retreating strike', 'stance 5, R  —  sweep their blade, then men (beats blockers)', 'your stance stops cuts on its own line; theirs does too  —  cut where their blade is not',
       'R, R  —  men, then diagonal men', 'stance 1: F, R  /  F, F  —  kote-men  /  kote-do', 'run + F  —  one-handed thrust', 'third hit of a combo  —  finisher'];
     ctx.fillStyle = 'rgba(5,4,12,0.62)'; ctx.fillRect(viewW - 462, 92, 450, 30 + tech.length * 17);
     text('TECHNIQUES', viewW - 24, 108, 11, '#888', 'right');
@@ -1931,7 +1945,7 @@ function drawHUD() {
   if (waveIntro > 0 && state === 'play') { const a = clamp(Math.min(waveIntro, 1.8 - waveIntro) * 3, 0, 1); ctx.globalAlpha = a; text(wave % 5 === 0 ? 'BOSS WAVE' : 'WAVE ' + wave, viewW / 2, 220, 64, wave % 5 === 0 ? '#ff3b3b' : '#fff'); ctx.globalAlpha = 1; }
   if (waveDone && state === 'play') text('WAVE CLEARED', viewW / 2, 220, 48, '#ffd23a');
   for (const t of texts) { if (!t.hud) continue; ctx.globalAlpha = clamp(Math.min(t.life, t.max - t.life) * 2, 0, 1); text(t.txt, viewW / 2, 290, t.size, t.color); ctx.globalAlpha = 1; }
-  if (wave === 1 && state === 'play') { ctx.globalAlpha = 0.75; text('A/D move  ·  W/Space jump  ·  R high  ·  F mid  ·  C low  ·  Q/Right-click block  ·  Shift dash  ·  E push  ·  1–8 stance', viewW / 2, VIEW_H - 16, 13, '#cfcfe6', 'center', 600); ctx.globalAlpha = 1; }
+  if (wave === 1 && state === 'play') { ctx.globalAlpha = 0.75; text('A/D move  ·  W/Space jump  ·  R high  ·  F mid  ·  C low  ·  Q/Right-click block  ·  Shift dash  ·  E push  ·  1–5 stance', viewW / 2, VIEW_H - 16, 13, '#cfcfe6', 'center', 600); ctx.globalAlpha = 1; }
   if (paused) { ctx.fillStyle = 'rgba(5,4,12,0.7)'; ctx.fillRect(0, 0, viewW, VIEW_H); text('PAUSED', viewW / 2, 290, 56); text('P or Esc to resume', viewW / 2, 330, 16, '#aaa', 'center', 600); }
 }
 function overlay(a) { ctx.fillStyle = `rgba(5,4,12,${a})`; ctx.fillRect(0, 0, viewW, VIEW_H); }
@@ -1977,7 +1991,7 @@ function drawTitle() {
   const c = '#cfcfe6';
   text('A / D  move      W / Space  jump (double)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
-  text('Shift  dash through attacks      E  energy push      1–8  hold a stance (same key again: auto)      P  pause      M  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
+  text('Shift  dash through attacks      E  energy push      1–5  stance (each covers one line)      P  pause      M  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
   if (best) text('BEST ' + best, viewW - 24, 36, 16, '#ffd23a', 'right');
 }
 function drawUpgrade() {
