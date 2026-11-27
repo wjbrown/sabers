@@ -220,6 +220,7 @@ let wave, score, hits, hitTimer, queue, spawnT, waveIntro, waveDone, clearT, max
 let camX = 0, shake = 0, hitstop = 0, slowT = 0, deadT = 0, flash = 0;
 let upgradeChoices = [], uiRects = [];
 let demo = false; const ai = {};
+let toddler = false; const kid = { n: 0, gap: 0, stars: 0 };
 let practice = false, drill = 0; const DRILLS = ['STANDS STILL', 'BLOCKS EVERYTHING', 'ATTACKS YOU'], pr = { last: 0, combo: 0, name: '' };
 
 // ── Move set ──────────────────────────────────────────────────────────────────────────────
@@ -599,7 +600,7 @@ function startGame() {
   player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = [];
   wave = 0; score = 0; hits = 0; hitTimer = 0; deadT = 0; hitstop = 0; slowT = 0; shake = 0;
   camX = clamp(player.x - viewW / 2, 0, Math.max(0, WORLD - viewW));
-  state = 'play'; paused = false; practice = false; demo = false; flares.length = 0; sfx('ignite'); nextWave();
+  state = 'play'; paused = false; practice = false; demo = false; toddler = false; flares.length = 0; sfx('ignite'); nextWave();
 }
 // Practice: one tireless partner, no waves, nothing to lose. T changes what the partner does.
 function spawnPartner() {
@@ -627,6 +628,34 @@ function startDemo() {
 }
 const AI_PLANS = [[1, 'F', 'R', 'R'], [1, 'F', 'F', 'F'], [1, 'C', 'R'], [2, 'R', 'R', 'F'], [2, 'R'], [3, 'F', 'R'], [3, 'R', 'F', 'F'], [3, 'C', 'R', 'R'], [4, 'R', 'R', 'R'], [4, 'F', 'C'],
   [5, 'F', 'R'], [5, 'C', 'F', 'R'], [6, 'R', 'R'], [6, 'F', 'R'], [6, 'C', 'F'], [7, 'F', 'C'], [7, 'R', 'F'], [8, 'R', 'F', 'F'], [0, 'C', 'C', 'C'], [0, 'R'], [0, 'F'], [0, 'E']];
+// Toddler mode: one button. Any key (the space bar is the big one) swings; the fighter walks to the next opponent by itself,
+// nothing ever hits back, and the game runs slowly. Three moves only: a side cut, an overhead cut, then a big finisher.
+const KID_COLORS = ['#ff5ad1', '#ffd23a', '#4dff7a', '#35d0ff', '#ff8a3a', '#b06bff'], KID_CHEERS = ['YAY!', 'WOW!', 'POW!', 'BOOM!', 'ZAP!', 'HOORAY!'];
+function spawnBuddy() {
+  const big = kid.stars > 2 && Math.random() < 0.25; spawn(big ? 'heavy' : 'grunt');
+  const e = enemies[enemies.length - 1], side = player.x > WORLD - 500 ? -1 : player.x < 500 ? 1 : Math.random() < 0.5 ? -1 : 1, hp = big ? 75 : 34;
+  Object.assign(e, { maxHp: hp, hp, block: 0, speed: e.speed * 0.55, blade: KID_COLORS[Math.floor(rand(KID_COLORS.length))], x: clamp(player.x + side * rand(250, 330), 80, WORLD - 80), entered: true, cool: 9, facing: -side });
+}
+function startToddler() {
+  startGame(); toddler = true; wave = 0; queue = []; waveIntro = 0; waveDone = false; kid.n = 0; kid.gap = 0.4; kid.stars = 0;
+  if (!player.nun) { player.hold = 'chudan'; player.guard = 'chudan'; }
+}
+function toddlerInput() {
+  let mash = false; for (const c of pressed) if (c !== 'Escape' && c !== 'KeyM' && !/^Bracket|^Minus|^Equal/.test(c)) mash = true;
+  keys.clear(); pressed.clear();
+  const p = player, e = nearestEnemy(4000);
+  if (e) {
+    const dx = e.x - p.x;
+    if (Math.abs(dx) > 74) keys.add(dx > 0 ? 'KeyD' : 'KeyA'); else if (!p.sw) p.facing = Math.sign(dx) || p.facing;
+  }
+  if (mash) { const c = kid.n++ % 2 ? 'KeyR' : 'KeyF'; pressed.add(c); keys.add(c); }
+}
+function cheer(e) {
+  kid.stars++; const c = KID_COLORS[kid.stars % KID_COLORS.length];
+  floatText(e.x, e.y - e.h - 30, KID_CHEERS[Math.floor(rand(KID_CHEERS.length))], c, 34);
+  sparks(e.x, e.y - e.h * 0.6, 26, c, 520); sparks(e.x, e.y - e.h * 0.6, 14, '#fff', 420); flare(e.x, e.y - e.h * 0.6, 70, c, 0.3);
+  sfx('heal'); if (kid.stars % 5 === 0) { sfx('wave'); floatText(player.x, player.y - 150, kid.stars + ' STARS!', '#ffd23a', 30); }
+}
 function demoAI(dt) {
   keys.clear(); pressed.clear();
   const p = player, e = nearestEnemy(4000); if (!e) return;
@@ -1005,7 +1034,7 @@ function damageEnemy(e, dmg, dir, kb, fin, unblockable, d) {
 }
 function kill(e) {
   const i = enemies.indexOf(e); if (i < 0) return;
-  enemies.splice(i, 1); shatter(e); sfx('die');
+  enemies.splice(i, 1); shatter(e); sfx('die'); if (toddler) cheer(e);
   score += e.score * (1 + Math.floor(hits / 10) * 0.5) | 0;
   floatText(e.x, e.y - e.h - 16, '+' + e.score, '#ffd23a', 16);
   sparks(e.x, e.y - e.h * 0.5, 22, e.blade || '#ffb347', 520);
@@ -1099,7 +1128,7 @@ function doPush() {
 // ───────────────────────── player update ─────────────────────────
 function updatePlayer(dt) {
   const p = player; if (p.hp <= 0) return;
-  if (demo) demoAI(dt);
+  if (demo) demoAI(dt); else if (toddler) toddlerInput();
   p.animT += dt; p.invuln -= dt; p.hitFlash -= dt; p.dashCool -= dt; p.pushCool -= dt; p.atkCool -= dt;
   if (p.comboTimer > 0) { p.comboTimer -= dt; if (p.comboTimer <= 0) p.comboIdx = 0; }
   const mx = (down(...K.right) ? 1 : 0) - (down(...K.left) ? 1 : 0);
@@ -1527,6 +1556,10 @@ function step(dt) {
     if (p.hp > 0) { p.hp = p.maxHp; p.en = p.maxEn; }
     for (const e of enemies) if (e.dummy) { e.block = drill === 1 ? 1 : drill === 2 ? 0.3 : 0; e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.25 * dt); }
     if (!enemies.length) spawnPartner();
+  } else if (toddler) { // one friendly opponent at a time, and nothing can go wrong
+    p.hp = p.maxHp; p.en = p.maxEn;
+    for (const e of enemies) { e.cool = Math.max(e.cool, 2); e.block = 0; }
+    if (!enemies.length) { kid.gap += dt; if (kid.gap > 0.9) { kid.gap = 0; spawnBuddy(); } }
   } else if (demo) { // a run of duels: whoever falls is replaced after a pause
     if (p.hp <= 0) { ai.deadT += dt; if (ai.deadT > 2.4) { const x = p.x; player = newPlayer(); player.x = x; ai.deadT = 0; ai.seen = null; ai.plan = ai.combo = null; for (const e of enemies) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.5); } }
     else if (!enemies.length) { ai.gap += dt; if (ai.gap > 2.6) { ai.gap = 0; p.hp = p.maxHp; spawnRival(); } }
@@ -1834,6 +1867,12 @@ function drawHUD() {
   const z = zoom * DPR; ctx.setTransform(z, 0, 0, z, 0, 0);
   const p = player;
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, viewW, VIEW_H); }
+  if (toddler) {
+    text('\u2605 ' + kid.stars, viewW / 2, 70, 54, '#ffd23a');
+    ctx.globalAlpha = 0.6 + Math.sin(uiT * 4) * 0.4; text('PRESS  SPACE!', viewW / 2, VIEW_H - 48, 34, '#fff'); ctx.globalAlpha = 1;
+    text('Esc  back to title', viewW - 24, 30, 12, '#aaa', 'right', 600);
+    return;
+  }
   if (p.hp > 0 && p.hp < p.maxHp * 0.3) { const g = ctx.createRadialGradient(viewW / 2, 300, 200, viewW / 2, 300, viewW * 0.7); g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(255,0,0,${0.18 + Math.sin(uiT * 6) * 0.08})`); ctx.fillStyle = g; ctx.fillRect(0, 0, viewW, VIEW_H); }
   text('HEALTH', 24, 30, 11, '#aaa', 'left'); bar(24, 36, 220, 12, p.hp / p.maxHp, p.hp < p.maxHp * 0.3 ? '#ff4d4d' : '#4dff7a');
   text(Math.ceil(p.hp) + ' / ' + p.maxHp, 250, 47, 11, '#ddd', 'left', 600);
@@ -1911,6 +1950,10 @@ function drawTitle() {
     ctx.fillStyle = 'rgba(40,34,80,0.6)'; ctx.fillRect(x, y, w, 24); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, 24);
     text('V  ·  WATCH A DEMO', viewW / 2, y + 16, 12, '#cfcfe6');
     uiRects.push({ x, y, w, h: 24, fn: () => { sfx('ui'); pressed.clear(); startDemo(); } }); }
+  { const w = 190, x = viewW / 2 - w / 2, y = 390;
+    ctx.fillStyle = 'rgba(40,34,80,0.6)'; ctx.fillRect(x, y, w, 24); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, 24);
+    text('B  ·  TODDLER MODE', viewW / 2, y + 16, 12, '#cfcfe6');
+    uiRects.push({ x, y, w, h: 24, fn: () => { sfx('ui'); pressed.clear(); startToddler(); } }); }
   const c = '#cfcfe6';
   text('A / D  move      W / Space  jump (double)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
@@ -1968,15 +2011,16 @@ function update(rdt) {
     if (hit('KeyT')) toggleTurtle();
     if (hit('KeyP')) { sfx('ui'); pressed.clear(); startPractice(); }
     if (hit('KeyV')) { sfx('ui'); pressed.clear(); startDemo(); }
+    if (hit('KeyB')) { sfx('ui'); pressed.clear(); startToddler(); }
     if (hit('ArrowRight', 'KeyD')) { bladeIdx = (bladeIdx + 1) % BLADES.length; store.set('ss_blade', String(bladeIdx)); sfx('ui'); }
     if (!clickUI() && hit('Enter', 'Space', 'Mouse0')) { sfx('ui'); pressed.clear(); startGame(); }
   } else if (state === 'play') {
-    if ((practice || demo) && hit('Escape')) { state = 'title'; practice = false; demo = false; paused = false; keys.clear(); }
-    else if (hit('KeyP', 'Escape')) paused = !paused;
+    if ((practice || demo || toddler) && hit('Escape')) { state = 'title'; practice = false; demo = false; toddler = false; paused = false; keys.clear(); }
+    else if (!toddler && hit('KeyP', 'Escape')) paused = !paused;
     if (practice && !paused && hit('KeyT')) { drill = (drill + 1) % DRILLS.length; sfx('ui'); }
     if (!paused) {
       if (hitstop > 0) hitstop -= rdt;
-      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts * speed / 100); }
+      else { let ts = 1; if (slowT > 0) { slowT -= rdt; ts = 0.3; } step(rdt * ts * speed / 100 * (toddler ? 0.6 : 1)); }
     }
   } else if (state === 'upgrade') {
     if (uiT > 0.35) { if (hit('Digit1')) pickUpgrade(0); else if (hit('Digit2')) pickUpgrade(1); else if (hit('Digit3')) pickUpgrade(2); else clickUI(); }
@@ -1996,6 +2040,7 @@ function frame(ts) {
 player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = []; queue = [];
 if (typeof location !== 'undefined' && /[?&]practice\b/.test(location.search || '')) startPractice();
 if (typeof location !== 'undefined' && /[?&]demo\b/.test(location.search || '')) startDemo();
+if (typeof location !== 'undefined' && /[?&]toddler\b/.test(location.search || '')) startToddler();
 requestAnimationFrame(frame);
 </script>
 </body>
