@@ -1300,6 +1300,8 @@ function startAttack(h, mx) {
   const hiki = p.onGround && p.comboIdx < 2 && mx && n && Math.abs(n.x - p.x) < 95 && mx === -(Math.sign(n.x - p.x) || p.facing);
   if (hiki) p.facing = -mx; else if (mx) p.facing = mx; else if (n) p.facing = Math.sign(n.x - p.x) || p.facing;
   let def, ready = false;
+  if (p.comboIdx === 0 || !p.seq) p.seq = []; p.seq.push(h);
+  const same = p.seq.length >= 3 && p.seq.slice(-3).every(x => x === h);   // the same button three times is just three cuts: a finisher has to be mixed
   if (!p.onGround) {
     def = AIRMOVES[h];
     if (def.rise && !p.airRise) { p.vy = Math.min(p.vy, -430); p.airRise = true; }
@@ -1308,7 +1310,7 @@ function startAttack(h, mx) {
   }
   else if (p.nuki > 0 && !p.nun && h === 'mid' && p.comboIdx < 2) def = MOVES.mid[0];           // men-nuki-do: the flank is open
   else if (hiki) def = HIKI[h];                                                             // backing off at close range
-  else if (p.comboIdx >= 2) def = (p.nun ? NFIN : FIN)[h];
+  else if (p.comboIdx >= 2 && !same) def = (p.nun ? NFIN : FIN)[h];
   else if (p.comboIdx === 0 && mx && Math.abs(p.vx) > 230) def = RUN[h];
   else if (p.comboIdx === 1 && p.lastDef && p.lastDef.next && p.lastDef.next[h]) { def = p.lastDef.next[h]; ready = true; }  // kote-men, kote-do…
   else if (G.pref && G.pref[h]) { def = G.pref[h]; ready = true; }                           // this kamae's own strike
@@ -1927,7 +1929,7 @@ function drawHUD() {
     const tech = p.nun ? ['whirls hit more than once', 'third hit of a combo: finisher', 'Q just before impact: parry', 'dash through an attack, then strike: NUKI', 'back + attack up close: retreating strike'] : [
       'Q just before impact  —  rising parry; then R: men', 'dash through an attack, then strike  —  NUKI (F: flank cut)', 'hit them in their wind-up  —  DEBANA',
       'cut into their cut  —  the blades CLASH, nobody is hit', 'men into their overhead cut  —  KIRI-OTOSHI, yours goes through', 'blocked up close  —  bind; back + attack: retreating strike', 'stance 5, R  —  sweep their blade, then men (beats blockers)', 'your stance stops cuts on its own line; theirs does too  —  cut where their blade is not',
-      'R, R  —  men, then diagonal men', 'stance 1: F, R  /  F, F  —  kote-men  /  kote-do', 'run + F  —  one-handed thrust', 'third hit of a combo  —  finisher'];
+      'R, R  —  men, then diagonal men', 'stance 1: F, R  /  F, F  —  kote-men  /  kote-do', 'run + F  —  one-handed thrust', 'third hit of a mixed combo (not the same button three times)  —  finisher'];
     ctx.fillStyle = 'rgba(5,4,12,0.62)'; ctx.fillRect(viewW - 462, 92, 450, 30 + tech.length * 17);
     text('TECHNIQUES', viewW - 24, 108, 11, '#888', 'right');
     tech.forEach((l, i) => text(l, viewW - 24, 126 + i * 17, 12, '#b9b6d6', 'right', 600));
