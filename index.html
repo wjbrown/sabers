@@ -243,9 +243,9 @@ const mv = (props, k) => Object.assign(props, { keys: mkKeys(k) });
 // Kamae. Kendo's five (chudan, jodan, gedan, hasso, waki), its right-foot jodan and seigan, plus kasumi from the older
 // sword schools. Each one chambers a different strike, so the stance you stand in decides what comes out fastest.
 const GUARDS = {
-  chudan: { n: 1, name: 'CHUDAN', line: 'mid', sub: 'middle · balanced · kote combinations', a: -0.52, hx: 15, hy: 22, cat: 'mid' },
+  chudan: { n: 1, name: 'CHUDAN', line: 'mid', sub: 'middle · balanced · kote combinations', a: -0.52, hx: 13, hy: 19, cat: 'mid' },
   jodan:  { n: 2, name: 'JODAN', line: 'high', sub: 'upper · fastest overhead cut · body open', a: -2.36, hx: 4, hy: -27, cat: 'hi', lean: -0.05 },
-  gedan:  { n: 3, name: 'GEDAN', line: 'low', sub: 'lower · invites the attack · best counters', a: 0.55, hx: 15, hy: 21, cat: 'lo' },
+  gedan:  { n: 3, name: 'GEDAN', line: 'low', sub: 'lower · invites the attack · best counters', a: 0.55, hx: 13, hy: 19, cat: 'lo' },
   hasso:  { n: 4, name: 'HASSO', line: 'high', sub: 'at the shoulder · fast follow-up cuts', a: -1.72, hx: -3, hy: -3, cat: 'hi', lean: -0.03 },
   waki:   { n: 5, name: 'WAKI', line: 'low', sub: 'blade hidden · slow, heaviest cut · blade sweep', a: 2.55, hx: -9, hy: 20, cat: 'lo', cr: 4, lean: 0.04 },
   seigan: { n: 6, name: 'SEIGAN', sub: 'tip at the eyes', a: -0.8, hx: 21, hy: 15, cat: 'mid' },
@@ -932,8 +932,11 @@ function pose(e) {
   const k1 = ik(hip, f1, 21 * s, 21 * s, -f), k2 = ik(hip, f2, 21 * s, 21 * s, -f);
   const sh = { x: lerp(neck.x, hip.x, 0.12), y: lerp(neck.y, hip.y, 0.12) };
   const dir = { x: f * Math.cos(sb.a), y: Math.sin(sb.a) };
-  const hand = { x: sh.x + f * sb.hx * s, y: sh.y + sb.hy * s };
-  limit(sh, hand, 33.5 * s);
+  // The arms work through their whole range: folded, elbows dropped, in guard and in the chamber; thrown out straight at
+  // the end of a cut. Hand offsets are remapped by distance: near and middle positions are kept, long ones are pushed out to a straight arm.
+  const hd = Math.hypot(sb.hx, sb.hy) || 1, hr = (hd + smooth(clamp((hd - 24) / 5, 0, 1)) * 8.6) / hd;
+  const hand = { x: sh.x + f * sb.hx * hr * s, y: sh.y + sb.hy * hr * s };
+  limit(sh, hand, 37.5 * s);
   // the shoulders turn with the cut: wound back in the chamber, driven through at impact
   const tw = f * clamp(sb.hx / 26, -1, 1) * 4.5 * s, shA = { x: sh.x + tw, y: sh.y }, shB = { x: sh.x - tw, y: sh.y + 1.5 * s };
   const freeX = shB.x - f * (3 + Math.cos(e.run) * 13) * s, freeY = sh.y + (21 - Math.abs(Math.sin(e.run)) * 5) * s;
@@ -941,8 +944,8 @@ function pose(e) {
   // (the left hand pulls as the right pushes), so the left hand visibly drives the cut.
   const grip = (e.nun ? 7 : 11) * s;
   const hand2 = { x: lerp(freeX, hand.x - dir.x * grip, sb.two), y: lerp(freeY, hand.y - dir.y * grip, sb.two) };
-  limit(shB, hand2, 33.5 * s);
-  const e1 = ik(shA, hand, 17 * s, 17 * s, f), e2 = ik(shB, hand2, 17 * s, 17 * s, f);
+  limit(shB, hand2, 37.5 * s);
+  const e1 = ik(shA, hand, 19 * s, 19 * s, f), e2 = ik(shB, hand2, 19 * s, 19 * s, f);
   const len = (e.gun ? 16 : e.bladeLen) * s;
   const tip = { x: hand.x + dir.x * len, y: hand.y + dir.y * len };
   if (m && (hopY || m.flip || m.turn)) {
