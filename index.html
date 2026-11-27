@@ -637,18 +637,19 @@ function spawnBuddy() {
   Object.assign(e, { maxHp: hp, hp, block: 0, speed: e.speed * 0.55, blade: KID_COLORS[Math.floor(rand(KID_COLORS.length))], x: clamp(player.x + side * rand(250, 330), 80, WORLD - 80), entered: true, cool: 9, facing: -side });
 }
 function startToddler() {
-  startGame(); toddler = true; wave = 0; queue = []; waveIntro = 0; waveDone = false; kid.n = 0; kid.gap = 0.4; kid.stars = 0;
+  const tm = turtleMode; if (!turtleMode) turtleMode = 1;   // toddler mode is always played as a turtle (the chosen one, else the sword turtle)
+  startGame(); turtleMode = tm; toddler = true; wave = 0; queue = []; waveIntro = 0; waveDone = false; kid.n = 0; kid.gap = 0.4; kid.stars = 0;
   if (!player.nun) { player.hold = 'chudan'; player.guard = 'chudan'; }
 }
 function toddlerInput() {
-  let mash = false; for (const c of pressed) if (c !== 'Escape' && c !== 'KeyM' && !/^Bracket|^Minus|^Equal/.test(c)) mash = true;
-  keys.clear(); pressed.clear();
-  const p = player, e = nearestEnemy(4000);
-  if (e) {
-    const dx = e.x - p.x;
-    if (Math.abs(dx) > 74) keys.add(dx > 0 ? 'KeyD' : 'KeyA'); else if (!p.sw) p.facing = Math.sign(dx) || p.facing;
+  // arrows move and jump as usual; the space bar is the only attack; every other key is ignored
+  const p = player, mash = pressed.has('Space'), up = pressed.has('ArrowUp');
+  for (const c of [...keys]) if (c !== 'ArrowLeft' && c !== 'ArrowRight' && c !== 'ArrowUp') keys.delete(c);
+  pressed.clear(); if (up) pressed.add('ArrowUp');
+  if (mash) {
+    const e = nearestEnemy(170); if (e && !p.sw && !keys.has('ArrowLeft') && !keys.has('ArrowRight')) p.facing = Math.sign(e.x - p.x) || p.facing; // swing at whoever is close
+    const c = kid.n++ % 2 ? 'KeyR' : 'KeyF'; pressed.add(c); keys.add(c);
   }
-  if (mash) { const c = kid.n++ % 2 ? 'KeyR' : 'KeyF'; pressed.add(c); keys.add(c); }
 }
 function cheer(e) {
   kid.stars++; kid.say = true; const c = KID_COLORS[kid.stars % KID_COLORS.length];
@@ -1870,7 +1871,8 @@ function drawHUD() {
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, viewW, VIEW_H); }
   if (toddler) {
     text('\u2605 ' + kid.stars, viewW / 2, 70, 54, '#ffd23a');
-    ctx.globalAlpha = 0.6 + Math.sin(uiT * 4) * 0.4; text('PRESS  SPACE!', viewW / 2, VIEW_H - 48, 34, '#fff'); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.6 + Math.sin(uiT * 4) * 0.4; text('PRESS  SPACE!', viewW / 2, VIEW_H - 56, 34, '#fff'); ctx.globalAlpha = 1;
+    text('\u2190 \u2192  move        \u2191  jump        SPACE  hit', viewW / 2, VIEW_H - 24, 15, '#cfcfe6', 'center', 600);
     text('Esc  back to title', viewW - 24, 30, 12, '#aaa', 'right', 600);
     return;
   }
