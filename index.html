@@ -156,7 +156,7 @@ function audioFrame(rdt) {
       const P = pose(p), rx = (P.tip.x - p.x) * p.facing, ry = P.tip.y - p.y;
       sp = clamp(Math.hypot(rx - snd.tx, ry - snd.ty) / rdt / 2600, 0, 1); snd.tx = rx; snd.ty = ry; lv = 1;
     }
-    for (const e of duel ? [du.f[1]] : enemies) if (e.melee && e.blade && !e.gun && e.hp > 0) {
+    for (const e of duel ? [du.f[1]] : enemies) if (e.melee && e.blade && !e.gun && !e.steel && e.hp > 0) {
       const P = pose(e), rx = (P.tip.x - e.x) * e.facing, ry = P.tip.y - e.y, near = clamp(1.2 - Math.abs(e.x - p.x) / 700, 0.15, 1);
       if (e.tpx === undefined) sfx('eignite'); else esp = Math.max(esp, clamp(Math.hypot(rx - e.tpx, ry - e.tpy) / rdt / 2600, 0, 1) * near);
       e.tpx = rx; e.tpy = ry; elv = Math.max(elv, near);
@@ -652,7 +652,7 @@ function startGame() {
 // Practice: one tireless partner, no waves, nothing to lose. T changes what the partner does.
 function spawnPartner() {
   spawn('duelist'); const e = enemies[enemies.length - 1];
-  Object.assign(e, { dummy: true, name: 'Training Partner', x: clamp(player.x + player.facing * 170, 60, WORLD - 60), entered: true, color: '#8d93a8', blade: '#ffb347', cool: 1.2 });
+  Object.assign(e, { dummy: true, name: 'Training Partner', x: clamp(player.x + player.facing * 170, 60, WORLD - 60), entered: true, color: '#8d93a8', blade: player.turtle ? STEEL : '#ffb347', cool: 1.2 });
   e.facing = Math.sign(player.x - e.x) || -1;
 }
 function startPractice() {
@@ -681,7 +681,7 @@ const KID_COLORS = ['#ff5ad1', '#ffd23a', '#4dff7a', '#35d0ff', '#ff8a3a', '#b06
 function spawnBuddy() {
   const big = kid.stars > 2 && Math.random() < 0.25; spawn(big ? 'heavy' : 'grunt');
   const e = enemies[enemies.length - 1], side = player.x > WORLD - 500 ? -1 : player.x < 500 ? 1 : Math.random() < 0.5 ? -1 : 1, hp = big ? 75 : 34;
-  Object.assign(e, { maxHp: hp, hp, block: 0, speed: e.speed * 0.55, blade: KID_COLORS[Math.floor(rand(KID_COLORS.length))], x: clamp(player.x + side * rand(250, 330), 80, WORLD - 80), entered: true, cool: 9, facing: -side });
+  Object.assign(e, { maxHp: hp, hp, block: 0, speed: e.speed * 0.55, [e.steel ? 'color' : 'blade']: KID_COLORS[Math.floor(rand(KID_COLORS.length))], x: clamp(player.x + side * rand(250, 330), 80, WORLD - 80), entered: true, cool: 9, facing: -side });
 }
 function startToddler() {
   const tm = turtleMode; if (!turtleMode) turtleMode = 1;   // toddler mode is always played as a turtle (the chosen one, else the sword turtle)
@@ -806,7 +806,18 @@ function spawn(type) {
   e.hp = e.maxHp;
   if (T.hover) { e.y = GROUND - 190; e.baseY = GROUND - rand(160, 210); e.onGround = false; e.sideOff = rand(170, 280) * (Math.random() < 0.5 ? -1 : 1); }
   if (T.boss) { texts.push({ x: 0, y: 0, hud: true, txt: T.name, life: 3, max: 3, color: '#ff3b3b', size: 30 }); shake = 12; }
+  if (player.turtle) ninjaSkin(e, type);
   enemies.push(e);
+}
+// A turtle's enemies are a ninja clan, not saber troopers: hooded figures with steel swords, and throwers of steel stars
+// where the troopers had blasters. (The hover drones keep their lasers.)
+const NINJA = {
+  grunt: { name: 'Clan Ninja', color: '#6a6488' }, duelist: { name: 'Clan Swordsman', color: '#9a4460' }, heavy: { name: 'Clan Brute', color: '#7d6a55', head: 'round' },
+  drone: { name: 'Star Thrower', color: '#55708a', head: 'round', star: true }, boss: { name: 'KURO, MASTER OF THE CLAN', color: '#1b1824', outline: '#c9c9d6' }
+};
+function ninjaSkin(e, type) {
+  const N = NINJA[type]; if (!N) return;
+  Object.assign(e, N, { ninja: true }); if (e.melee) { e.blade = STEEL; e.steel = true; }
 }
 
 // ───────────────────────── skeleton / pose ─────────────────────────
@@ -1418,8 +1429,9 @@ function enemyStrike(e, aoe) {
 }
 function fireBolt(x, y, tx, ty, speed, dmg, src) {
   const a = Math.atan2(ty - y, tx - x);
-  bolts.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, owner: 'e', dmg, life: 3, src });
-  sfx('bolt');
+  const star = !!(src && src.star);
+  bolts.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, owner: 'e', dmg, life: 3, src, star });
+  sfx(star ? 'eswing' : 'bolt');
 }
 function reflectBolt(b, perfect) {
   const p = player, src = b.src && enemies.includes(b.src) ? b.src : null, spd = Math.hypot(b.vx, b.vy) * 1.35;
@@ -1713,7 +1725,7 @@ function updateEnemy(e, dt) {
     e.fireT -= dt;
     if (alive && e.fireT <= 0 && e.entered && dist < 650) {
       const P = pose(e); fireBolt(P.tip.x, P.tip.y, P.tip.x + P.dir.x * 100, P.tip.y + P.dir.y * 100, 620, e.dmg, e);
-      e.fireT = rand(1.4, 2.2); sparks(P.tip.x, P.tip.y, 3, '#ff9d5c', 200);
+      e.fireT = rand(1.4, 2.2); if (!e.star) sparks(P.tip.x, P.tip.y, 3, '#ff9d5c', 200);
     }
   } else if (e.melee) {
     switch (e.state) {
@@ -1865,7 +1877,7 @@ function step(dt) {
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     let dead = b.life <= 0;
-    if (b.y >= GROUND) { sparks(b.x, GROUND, 5, b.owner === 'e' ? '#ff7a3a' : p.blade, 220); dead = true; }
+    if (b.y >= GROUND) { sparks(b.x, GROUND, 5, b.star ? STEEL : b.owner === 'e' ? '#ff7a3a' : p.blade, 220); dead = true; }
     else if (b.owner === 'e' && p.hp > 0) {
       if (Math.abs(b.x - p.x) < 18 && b.y > p.y - 92 && b.y < p.y) {
         if (p.dash > 0 || p.invuln > 0) { /* pass through */ }
@@ -2056,7 +2068,9 @@ function drawHead(h, e, color) {
     const r = h.r * 0.95; ctx.fillRect(h.x - r, h.y - r, r * 2, r * 2);
     ctx.fillStyle = e.hitFlash > 0 ? '#000' : (e.gun && e.fireT < 0.4 ? '#fff' : '#ff4a2a');
     ctx.fillRect(h.x - r * 0.7 + (e.facing > 0 ? r * 0.5 : 0), h.y - r * 0.3, r * 0.9, r * 0.45);
-  } else { ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, 6.2832); ctx.fill(); }
+  } else { ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, 6.2832); ctx.fill();
+    if (e.ninja) { ctx.fillStyle = e.hitFlash > 0 ? '#000' : '#f0dcc0'; const w = h.r * 1.15; ctx.fillRect(h.x + (e.facing > 0 ? h.r * 0.95 - w : -h.r * 0.95), h.y - h.r * 0.28, w, h.r * 0.42); }   // the eye-slit of the hood
+  }
 }
 function drawFigure(e) {
   if (e.hover) return drawHover(e);
@@ -2068,11 +2082,14 @@ function drawFigure(e) {
   strokeSkeleton(P, s, col, (e.turtle ? 5.4 : 4.6) * s);
   drawHead(P.head, e, col);
   if (e.turtle) drawHeadband(P, e, s);
-  if (e.gun) {
+  if (e.star) { // a thrower shows the next star in the hand just before it flies
+    if (e.fireT < 0.6) { ctx.fillStyle = STEEL; ctx.save(); ctx.translate(P.hand.x, P.hand.y); ctx.rotate(e.animT * 3); ctx.fillRect(-5, -1.5, 10, 3); ctx.fillRect(-1.5, -5, 3, 10); ctx.restore(); }
+  } else if (e.gun) {
     ctx.strokeStyle = '#3c4654'; ctx.lineWidth = 7 * s; ctx.lineCap = 'butt'; line(P.hand, P.tip);
     if (e.fireT < 0.4) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = '#ff7a3a'; ctx.globalAlpha = 1 - e.fireT / 0.4; ctx.beginPath(); ctx.arc(P.tip.x, P.tip.y, 7, 0, 6.2832); ctx.fill(); ctx.restore(); }
   } else if (e.steel) {
     drawKatana(P, e, s);
+    if (e.state === 'windup') { const k = clamp(1 - e.stateT / e.windT, 0, 1); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = k * 0.9; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(P.tip.x, P.tip.y, 2 + 5 * k, 0, 6.2832); ctx.fill(); ctx.restore(); }   // the glint on the point that gives a cut away
   } else if (e.nun) {
     drawNun(P, e, s);
   } else if (e.blade) {
@@ -2175,6 +2192,10 @@ function drawWorld() {
   // bolts
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
   for (const b of bolts) {
+    if (b.star) { // a spinning four-pointed steel star
+      ctx.shadowBlur = 0; ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(uiT * 26 * Math.sign(b.vx || 1));
+      ctx.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? 3.2 : 10, a = i * Math.PI / 4; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath();
+      ctx.fillStyle = STEEL; ctx.fill(); ctx.strokeStyle = '#5c6675'; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = '#2a2f3a'; ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, 6.2832); ctx.fill(); ctx.restore(); continue; }
     const col = b.owner === 'e' ? '#ff5a2a' : player.blade, sp = Math.hypot(b.vx, b.vy), ux = b.vx / sp, uy = b.vy / sp;
     ctx.shadowColor = col; ctx.shadowBlur = 14 * z; ctx.strokeStyle = col; ctx.lineWidth = 6;
     ctx.beginPath(); ctx.moveTo(b.x - ux * 22, b.y - uy * 22); ctx.lineTo(b.x, b.y); ctx.stroke();
