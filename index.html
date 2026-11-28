@@ -1042,6 +1042,7 @@ function duelUpdate(dt) {
     updatePlayer(dt);
   }
   if (A.hp > 0 && B.hp > 0) {
+    duelContact();
     if (A.dash <= 0 && B.dash <= 0) { player = A; enemies = [B]; collide(); }
     const span = Math.max(420, viewW - 170), gap = Math.abs(A.x - B.x) - span;      // keep both on screen
     if (gap > 0) { const sgn = Math.sign(B.x - A.x); A.x += sgn * gap / 2; B.x -= sgn * gap / 2; }
@@ -1062,7 +1063,26 @@ function duelRules(dt) {
 // Is this fighter in the middle of a cut that an incoming cut would meet?
 function duelCutting(q, from) {
   const s = q.sw, d = s && s.def; if (!s || !d.keys || d.noHit || d.fin) return false;
-  const k = swK(s); return k > 0.15 && k < (d.act || ACT)[1] && (d.around || (from.x - q.x) * q.facing > 0);
+  const k = swK(s); return k > Math.max(0.15, d.keys[0].k) && k < (d.act || ACT)[1] && (d.around || (from.x - q.x) * q.facing > 0);
+}
+// still drawing the blade back for a cut: caught here, a fighter is hit harder (debana)
+const duelWinding = q => !!(q.sw && q.sw.def.keys && !q.sw.def.noHit && !q.sw.def.fin && swK(q.sw) < q.sw.def.keys[0].k);
+// Blades that actually cross: two live cuts clash; any other touch of a moving blade flashes and sounds.
+function duelContact() {
+  const [A, B] = du.f, live = q => { const s = q.sw, d = s && s.def; if (!s || !d.keys || d.noHit || d.fin) return false; const k = swK(s), a = d.act || ACT; return k > a[0] - 0.14 && k < a[1]; };
+  const moving = q => !!(q.sw && q.sw.def.keys && !q.sw.def.noHit);
+  const [ac, ap] = bladeOf(A), [bc, bp] = bladeOf(B);
+  if ((!moving(A) && !moving(B)) || Math.abs(A.x - B.x) > 190) return;
+  const la = live(A), lb = live(B);
+  if (la && lb && A.sw.def.h === 'high' && B.sw.def.h === 'high' && (A.sw.def.nm || B.sw.def.nm)) return;   // kiri-otoshi goes through
+  const aS = [[ac.h, ac.t], [ap.t, ac.t]], bS = [[bc.h, bc.t], [bp.t, bc.t]];
+  let at = null; for (const a of aS) for (const b of bS) at = at || segHit(a[0], a[1], b[0], b[1]);
+  if (!at) return;
+  if (la && lb) { duelClash(A, B, A.sw.def.h || 'mid'); return; }
+  if (!(du.grazeN > frameN) && !(A.clashT > 0) && !(B.clashT > 0) && !(A.lockT > 0) && !(A.glowN > frameN) && !(B.glowN > frameN)) {
+    du.grazeN = frameN + 24; flare(at.x, at.y, 28, '#fff', 0.1); sparks(at.x, at.y, 5, '#fff', 260); sparks(at.x, at.y, 3, B.blade, 220);
+    A.glowN = B.glowN = frameN + 8; sfx('graze');
+  }
 }
 function duelClash(a, b, h) {
   const dir = Math.sign(b.x - a.x) || a.facing, C = CLASH_POSE[h] || CLASH_POSE.mid;
@@ -1101,6 +1121,9 @@ function duelHit(def, dmg, dir, fin, d) {
       sparks(at.x, at.y, 12, '#fff', 420); sparks(at.x, at.y, 6, att.blade, 300); sfx('clash'); shake = Math.max(shake, 5); hitstop = Math.max(hitstop, 0.04);
       if (def.sab) { def.sab.a += d.h === 'high' ? -0.4 : 0.32; def.sab.hx -= 8; def.sab.hy += 3; }
       if (fin || def.en <= 0) { def.en = Math.max(0, def.en); def.stun = 0.75; def.blocking = false; sfx('stun'); floatText(def.x, def.y - 120, 'GUARD BREAK', '#ff4d4d', 18); }
+      else if (!d.air && att.onGround && def.onGround && att.sw && Math.abs(def.x - att.x) < 82) {   // tsuba-zeriai: guard against guard until someone breaks away
+        att.sw = null; att.queued = null; att.atkCool = 0.08; att.lockT = def.lockT = 0.42; att.vx = def.vx = 0; att.lockE = def; def.lockE = att;
+      }
     }
     return false;
   }
@@ -1267,7 +1290,7 @@ function updatePlayer(dt) {
     }
     if (p.lockT <= 0 && alive) {
       le.lockT = 0;
-      if (!p.sw && p.dash <= 0) {
+      if (!p.sw && p.dash <= 0 && !(le.pvp && (le.sw || le.dash > 0))) {
         if ((le.type === 'duelist' || le.boss) && !le.dummy && le.state === 'chase' && Math.random() < 0.4) { // they break the bind first: hiki-waza
           le.sw = Object.assign(beginSwing(le, Math.random() < 0.6 ? HIKI.high : HIKI.mid, 1), { struck: false }); le.lastEnd = 'mid';
           setState(le, 'windup', le.windup * 0.75); le.comboLeft = 1; p.vx = -p.facing * 60;
@@ -1338,7 +1361,7 @@ function updatePlayer(dt) {
         if (okX && e.y > p.y - band[0] && e.y - e.h < p.y + band[1]) {
           s.hitSet.add(e);
           if (!p.nun && !d.fin && e.melee && e.blade && e.state === 'swing' && e.sw && !e.sw.struck && !(d.h === 'high' && d.nm && e.sw.def.h === 'high')) { doClash(e); break; }
-          const deb = e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;
+          const deb = e.pvp ? duelWinding(e) : e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;
           const ko = !p.nun && d.h === 'high' && d.nm && e.melee && e.state === 'swing' && e.sw && !e.sw.struck && e.sw.def.h === 'high';                // debana: caught as their attack starts
           if (damageEnemy(e, d.dmg * p.dmgMul * (s.bonus || 1) * (deb ? 1.3 : 1), Math.sign(e.x - p.x) || p.facing, d.kb, d.fin, d.h === 'low' && !(e.block && GUARDS[e.guard] && GUARDS[e.guard].line === 'low'), d)) {
             if (d.nm && !s.called) { s.called = true; floatText(p.x + p.facing * 26, p.y - 122, d.nm + '!', '#fff', 15); } // kiai: call the target
