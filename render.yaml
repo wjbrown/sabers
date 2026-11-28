@@ -1,0 +1,13 @@
+# Render "Blueprint": one web service that serves the game page and runs the online-duel rooms (WebSockets) at the same
+# address. The free plan sleeps after ~15 minutes idle and wakes on the next visit.
+services:
+  - type: web
+    name: stick-sabers
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22

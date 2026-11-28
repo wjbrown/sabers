@@ -1,0 +1,12 @@
+{
+  "name": "stick-sabers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
