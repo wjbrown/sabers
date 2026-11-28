@@ -56,9 +56,49 @@ const down = (...c) => c.some(k => keys.has(k));
 const hit = (...c) => c.some(k => pressed.has(k));
 const K = {
   left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], jump: ['KeyW', 'ArrowUp'],
-  high: ['KeyR'], mid: ['KeyF', 'Mouse0'], low: ['KeyC'], block: ['KeyQ', 'Mouse2'],
-  dash: ['ShiftLeft', 'ShiftRight'], push: ['KeyE']
+  high: ['KeyR', 'KeyU'], mid: ['KeyF', 'KeyJ', 'Mouse0'], low: ['KeyC', 'KeyM'], block: ['KeyQ', 'KeyK', 'Mouse2'],
+  dash: ['ShiftLeft', 'ShiftRight', 'KeyL'], push: ['KeyE', 'KeyO']
 };
+// Game controllers (the standard Xbox / PlayStation layout). A pad is read as the keys it stands for, so the rest of the
+// game never knows the difference:  stick / d-pad move, up jumps  ·  Y / X / A cut high / mid / low (top, middle, bottom
+// of the diamond)  ·  B dash  ·  LB or LT block  ·  RB push  ·  RT slow time  ·  right stick picks the stance (up high,
+// down low, toward middle, away hidden; click it for shoulder)  ·  Start pause / confirm  ·  Back quit.
+const PAD_BTN = { 0: 'KeyC', 1: 'ShiftLeft', 2: 'KeyF', 3: 'KeyR', 4: 'KeyQ', 6: 'KeyQ', 5: 'KeyE', 7: 'Space', 8: 'Escape', 9: 'Enter', 11: 'Digit4', 12: 'KeyW', 14: 'KeyA', 15: 'KeyD' };
+const pads = [];                                    // one entry per connected pad: { held, hit } as sets of key codes
+function padRead(gp, facing) {
+  const c = new Set(), b = i => gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.4), ax = gp.axes;
+  for (const i in PAD_BTN) if (b(i)) c.add(PAD_BTN[i]);
+  if (ax[0] < -0.45) c.add('KeyA'); if (ax[0] > 0.45) c.add('KeyD'); if (ax[1] < -0.7) c.add('KeyW');
+  const rx = ax[2] || 0, ry = ax[3] || 0;
+  if (Math.hypot(rx, ry) > 0.6) c.add(Math.abs(ry) > Math.abs(rx) ? (ry < 0 ? 'Digit2' : 'Digit3') : rx * facing > 0 ? 'Digit1' : 'Digit5');
+  return c;
+}
+function padPoll(facingOf) {
+  const list = typeof navigator !== 'undefined' && navigator.getGamepads ? [...navigator.getGamepads()].filter(g => g && g.connected && g.buttons.length >= 10) : [];
+  list.forEach((gp, i) => {
+    const prev = pads[i] ? pads[i].held : new Set(), held = padRead(gp, facingOf(i, list.length)), hitS = new Set();
+    for (const k of held) if (!prev.has(k)) hitS.add(k);
+    pads[i] = { held, hit: hitS, prev };
+  });
+  pads.length = list.length;
+}
+// outside a local duel every pad drives the one player (and the menus)
+const padOwn = new Set();
+function padMerge(all) {
+  const cur = new Set(), play = state === 'play';
+  const ok = k => all ? (play || !/^Digit/.test(k)) : k === 'Enter' || k === 'Escape';     // stance flicks must not pick menu items
+  for (const P of pads) {
+    for (const k of P.held) if (ok(k)) cur.add(k);
+    for (const k of P.hit) if (ok(k)) { pressed.add(all && play && k === 'Enter' ? 'KeyP' : k); audioInit(); }
+    if (!play && P.hit.has('KeyC')) pressed.add('Enter');                                   // A confirms in menus
+  }
+  if (all && state === 'upgrade') for (const P of pads) { if (P.hit.has('KeyF')) pressed.add('Digit1'); if (P.hit.has('KeyR')) pressed.add('Digit2'); if (P.hit.has('ShiftLeft')) pressed.add('Digit3'); }
+  if (all && toddler && state === 'play') for (const P of pads) for (const k of ['KeyR', 'KeyF', 'KeyC']) { if (P.held.has(k)) cur.add('Space'); if (P.hit.has(k)) pressed.add('Space'); }
+  for (const k of padOwn) if (!cur.has(k)) keys.delete(k);
+  padOwn.clear(); for (const k of cur) { keys.add(k); padOwn.add(k); }
+}
+// in a local duel: two pads are player 1 and player 2; a single pad is player 2 (player 1 has the keyboard)
+const duelPad = i => pads.length >= 2 ? pads[i] : pads.length === 1 && i === 1 ? pads[0] : null;
 
 // ───────────────────────── audio ─────────────────────────
 // Every sound is synthesised with WebAudio (oscillators and filtered noise); there are no sample files.
@@ -1036,7 +1076,8 @@ function duelUpdate(dt) {
   for (let i = 0; i < 2; i++) {
     const me = du.f[i], other = du.f[1 - i], map = DUEL_KEYS[i];
     keys.clear(); pressed.clear();
-    if (!frozen) { for (const c of K0) if (map[c]) keys.add(map[c]); for (const c of P0) if (map[c]) pressed.add(map[c]); }
+    if (!frozen) { for (const c of K0) if (map[c]) keys.add(map[c]); for (const c of P0) if (map[c]) pressed.add(map[c]);
+      const gp = duelPad(i); if (gp) { for (const c of gp.held) if (c !== 'Enter' && c !== 'Escape' && c !== 'Space') keys.add(c); for (const c of gp.hit) pressed.add(c); } }
     player = me; enemies = other.hp > 0 ? [other] : [];
     if (me.swept > 0) me.swept -= dt;
     updatePlayer(dt);
@@ -2047,8 +2088,9 @@ function drawDuelHUD() {
     ctx.globalAlpha = Math.min(1, du.bannerT * 3); text(du.bannerT > 0.9 ? 'ROUND ' + du.round : 'FIGHT!', viewW / 2, 250, 60, '#fff'); ctx.globalAlpha = 1;
   } else if (du.endT > 0.5) text(du.last < 0 ? 'DOUBLE KO' : DUEL_NAMES[du.last] + ' TAKES THE ROUND', viewW / 2, 250, 34, du.last < 0 ? '#fff' : du.f[du.last].blade);
   const c = '#cfcfe6';
-  text('P1   A / D move  ·  W jump  ·  R F C cut high / mid / low  ·  Q block  ·  Left Shift dash  ·  E push  ·  1–5 stance', viewW / 2, VIEW_H - 34, 12, c, 'center', 600);
-  text('P2   ← / → move  ·  ↑ jump  ·  U J M cut high / mid / low  ·  K block  ·  Right Shift dash  ·  O push  ·  6–0 stance', viewW / 2, VIEW_H - 16, 12, c, 'center', 600);
+  const PADL = 'controller:  stick move, up jump  ·  Y X A cut high / mid / low  ·  B dash  ·  LB block  ·  RB push  ·  right stick stance';
+  text('P1   ' + (duelPad(0) ? PADL : 'A / D move  ·  W jump  ·  R F C cut high / mid / low  ·  Q block  ·  Left Shift dash  ·  E push  ·  1–5 stance'), viewW / 2, VIEW_H - 34, 12, c, 'center', 600);
+  text('P2   ' + (duelPad(1) ? PADL : '← / → move  ·  ↑ jump  ·  U J M cut high / mid / low  ·  K block  ·  Right Shift dash  ·  O push  ·  6–0 stance'), viewW / 2, VIEW_H - 16, 12, c, 'center', 600);
 }
 function drawHUD() {
   const z = zoom * DPR; ctx.setTransform(z, 0, 0, z, 0, 0);
@@ -2152,7 +2194,7 @@ function drawTitle() {
   const c = '#cfcfe6';
   text('A / D  move      W  jump (double)      Space  slow time (uses energy)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
-  text('Shift  dash through attacks      E  energy push      1–5  stance (each covers one line)      P  pause      M  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
+  text('Shift  dash through attacks      E  energy push      1–5  stance (each covers one line)      P  pause      N  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
   if (best) text('BEST ' + best, viewW - 24, 36, 16, '#ffd23a', 'right');
 }
 function drawUpgrade() {
@@ -2198,7 +2240,8 @@ function clickUI() {
 }
 function update(rdt) {
   uiT += rdt; if (flash > 0) flash -= rdt; shake = Math.max(0, shake - rdt * 45);
-  if (hit('KeyM')) muted = !muted;
+  padPoll((i, n) => duel && du.f.length ? (du.f[n >= 2 ? i : 1] || player).facing : player ? player.facing : 1); padMerge(!(duel && state === 'play'));
+  if (hit('KeyN')) muted = !muted;
   if (hit('BracketLeft', 'Minus')) setSpeed(-10); if (hit('BracketRight', 'Equal')) setSpeed(10); if (speedT > 0) speedT -= rdt;
   audioFrame(rdt);
   if (state === 'title') {
