@@ -54,6 +54,7 @@ const http = createServer((req, res) => {
   const path = (req.url || '/').split('?')[0];
   if (path === '/health') { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); return res.end('stick-sabers server ok — ' + rooms.size + ' rooms\n'); }
   if (path === '/' || path === '/index.html') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); return res.end(PAGE); }
+  if (path === '/favicon.ico') { res.writeHead(204); return res.end(); }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('not found\n');
 });
 const wss = new WebSocketServer({ server: http, maxPayload: 4096 });

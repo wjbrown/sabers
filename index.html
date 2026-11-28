@@ -1314,12 +1314,12 @@ function drawOnline() {
   if (net.status === 'room') {
     text('ROOM', cx, 222, 14, '#b8b4d8', 'center', 600);
     ctx.save(); ctx.shadowColor = BLADES[bladeIdx]; ctx.shadowBlur = 24 * z; text(net.code, cx, 290, 76); ctx.restore();
-    text(net.msg || 'Waiting for your opponent…' + '.'.repeat(Math.floor(uiT * 2) % 3), cx, 336, 18, '#fff', 'center', 600);
+    text(net.msg || 'Waiting for your opponent…' + '.'.repeat(Math.floor(Math.max(0, uiT) * 2) % 3), cx, 336, 18, '#fff', 'center', 600);
     text('They choose Online Duel and type this code — or send them the link:', cx, 384, 14, '#b8b4d8', 'center', 600);
     text(netLink(), cx, 408, 15, '#fff', 'center', 600);
     text(net.copied > 0 ? 'link copied' : 'C or click  copy the link', cx, 434, 13, net.copied > 0 ? '#4dff7a' : '#cfcfe6', 'center', 600);
   } else if (net.status === 'connecting') {
-    text('Connecting' + '.'.repeat(Math.floor(uiT * 2) % 4), cx, 290, 24);
+    text('Connecting' + '.'.repeat(Math.floor(Math.max(0, uiT) * 2) % 4), cx, 290, 24);
     if (net.waitT > 4) text('The server sleeps when nobody is playing. Waking it can take up to a minute.', cx, 326, 14, '#b8b4d8', 'center', 600);
   } else {
     text('Enter  create a room', cx, 250, 22);
@@ -2460,9 +2460,9 @@ function update(rdt) {
 }
 let last = performance.now();
 function frame(ts) {
-  const rdt = Math.min((ts - last) / 1000, 1 / 30); last = ts;
+  requestAnimationFrame(frame);                                   // first, so one bad frame cannot stop the game
+  const rdt = clamp((ts - last) / 1000, 0, 1 / 30); last = ts;    // (the first frame's time can be earlier than `last`)
   update(rdt); render();
-  requestAnimationFrame(frame);
 }
 player = newPlayer(); enemies = []; bolts = []; parts = []; debris = []; texts = []; orbs = []; ghosts = []; queue = [];
 if (typeof location !== 'undefined' && /[?&]practice\b/.test(location.search || '')) startPractice();
