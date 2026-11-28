@@ -1069,6 +1069,7 @@ const DUEL_KEYS = [
     Digit1: 'Digit1', Digit2: 'Digit2', Digit3: 'Digit3', Digit4: 'Digit4', Digit5: 'Digit5' },
   { ArrowLeft: 'KeyA', ArrowRight: 'KeyD', ArrowUp: 'KeyW', KeyU: 'KeyR', KeyJ: 'KeyF', KeyM: 'KeyC', KeyK: 'KeyQ', ShiftRight: 'ShiftLeft', KeyO: 'KeyE',
     Digit6: 'Digit1', Digit7: 'Digit2', Digit8: 'Digit3', Digit9: 'Digit4', Digit0: 'Digit5' }];
+const WHIFF = 12;   // energy lost to a cut that hits nothing
 const DUEL_DMG = 0.9, DUEL_WINS = 2, DUEL_NAMES = ['PLAYER 1', 'PLAYER 2'];
 const duelName = i => net.on ? (i === net.me ? 'YOU' : 'OPPONENT') : DUEL_NAMES[i];
 function duelFighter(i) {
@@ -1509,7 +1510,8 @@ function updatePlayer(dt) {
     for (const e of enemies) if (e.sw && e.sw.def && (e.pvp ? !e.sw.def.noHit : e.state === 'windup' || e.state === 'swing')) { const dd = Math.abs(e.x - p.x); if (dd < bd) { bd = dd; th = e; } }
     p.blockH = th ? th.sw.def.h || 'mid' : 'mid';
   }
-  if (!p.blocking && !focus) p.en = Math.min(p.maxEn, p.en + p.regen * dt);
+  if (p.tiredT > 0) p.tiredT -= dt;
+  if (!p.blocking && !focus && !(p.tiredT > 0)) p.en = Math.min(p.maxEn, p.en + p.regen * dt);
 
   // dash
   if (hit(...K.dash) && !stunned && p.dashCool <= 0 && p.en >= p.dashCost && p.dash <= 0) {
@@ -1537,6 +1539,8 @@ function updatePlayer(dt) {
   if (p.sw) {
     const s = p.sw, d = s.def; s.t += dt;
     const k = swK(s), act = d.act || ACT;
+    // a cut that meets nothing (no body, no blade, no bolt) costs energy and holds up its return for a moment
+    if (!s.paid && !d.noHit && k >= act[1]) { s.paid = true; if (!s.met) { p.en = Math.max(0, p.en - WHIFF); p.tiredT = 0.5; } }
     if (!s.stepped && k >= (d.stepK || 0.3)) { s.stepped = true; if (p.onGround && d.lunge) p.vx = p.facing * d.lunge; } // the step drives the cut
     if (!s.stomp && !d.air && k >= act[0] + 0.1 && p.onGround) { // fumikomi: the foot stamps flat as the blade lands — sword, body and voice arrive together
       s.stomp = true; dust(p.x + p.facing * 24, GROUND, d.nm ? 4 : 2); if (d.nm && !p.nun) { sfx('stomp'); shake = Math.max(shake, 2); }
@@ -1557,7 +1561,7 @@ function updatePlayer(dt) {
         const dx = (e.x - p.x) * p.facing;
         const okX = d.around ? Math.abs(dx) < reach + e.w : dx > -22 && dx < reach + e.w;
         if (okX && e.y > p.y - band[0] && e.y - e.h < p.y + band[1]) {
-          s.hitSet.add(e);
+          s.hitSet.add(e); s.met = true;
           if (!p.nun && !d.fin && e.melee && e.blade && e.state === 'swing' && e.sw && !e.sw.struck && !(d.h === 'high' && d.nm && e.sw.def.h === 'high')) { doClash(e); break; }
           const deb = e.pvp ? duelWinding(e) : e.melee && e.state === 'windup', ex = e.x, ey = e.y - e.h;
           const ko = !p.nun && d.h === 'high' && d.nm && e.melee && e.state === 'swing' && e.sw && !e.sw.struck && e.sw.def.h === 'high';                // debana: caught as their attack starts
@@ -1574,7 +1578,7 @@ function updatePlayer(dt) {
       for (const b of bolts) {
         if (b.owner !== 'e') continue;
         const dx = (b.x - p.x) * p.facing;
-        if ((d.around ? Math.abs(dx) < reach : dx > -15 && dx < reach) && b.y > p.y - 120 && b.y < p.y + 10) reflectBolt(b, false);
+        if ((d.around ? Math.abs(dx) < reach : dx > -15 && dx < reach) && b.y > p.y - 120 && b.y < p.y + 10) { reflectBolt(b, false); s.met = true; }
       }
     }
     const q = p.queued;
@@ -1655,6 +1659,7 @@ function startAttack(h, mx) {
     else if (p.hold === 'hasso' && p.comboIdx >= 1 && !p.nun) { quicken(p.sw, 0.4); p.sw.bonus = 1.15; }          // hasso: the follow-ups come fast
     else if (ready) quicken(p.sw, p.hold === 'jodan' && h === 'high' ? 0.3 : 0.45);                              // already chambered
   }
+  if (p.en < WHIFF && !toddler) { p.sw.dur *= 1.3; p.sw.bonus = (p.sw.bonus || 1) * 0.7; }   // out of breath: slower and weaker
   if (def.end) { p.guard = (p.nun ? NEND : END_GUARD)[def.end]; p.guardT = (p.hold ? 0.3 : 1.6) + def.dur; }
   p.queued = null; p.comboTimer = 0;
   sfx('swing');
@@ -2364,7 +2369,7 @@ function drawTitle() {
     text('3  ·  ONLINE DUEL', viewW / 2, y + 16, 12, '#cfcfe6');
     uiRects.push({ x, y, w, h: 24, fn: () => { sfx('ui'); pressed.clear(); openOnline(); } }); }
   const c = '#cfcfe6';
-  text('A / D  move      W  jump (double)      Space  slow time (uses energy)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; try them running and mid-air', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
+  text('A / D  move      W  jump (double)      Space  slow time (uses energy)      R  high      F / Click  mid      C  low  — mix any 3 for a finisher; a cut that meets nothing costs energy', viewW / 2, VIEW_H - 62, 13, c, 'center', 600);
   text('Q / Right-click  block — tap just before impact to PARRY, block bolts to send them back      back + attack up close: retreating strike', viewW / 2, VIEW_H - 42, 13, c, 'center', 600);
   text('Shift  dash through attacks      E  energy push      1–5  stance (each covers one line)      P  pause      N  mute      [ / ]  game speed (' + speed + '%)', viewW / 2, VIEW_H - 22, 13, c, 'center', 600);
   if (best) text('BEST ' + best, viewW - 24, 36, 16, '#ffd23a', 'right');
